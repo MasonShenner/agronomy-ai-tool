@@ -3,3 +3,4 @@ pandas
 geopandas
 pyogrio
 openpyxl
+plotly
