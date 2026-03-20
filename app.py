@@ -5,6 +5,7 @@ import tempfile
 import os
 import plotly.express as px
 import plotly.graph_objects as go
+import json
 
 # Try to import geopandas for shapefile support
 try:
@@ -174,7 +175,6 @@ def read_uploaded_file(uploaded_file):
                 zip_ref.extractall(tmpdir)
                 extracted_files = zip_ref.namelist()
 
-            # CSV inside ZIP
             for inner_file in extracted_files:
                 if inner_file.lower().endswith(".csv"):
                     csv_path = os.path.join(tmpdir, inner_file)
@@ -182,7 +182,6 @@ def read_uploaded_file(uploaded_file):
                     df = clean_columns(df)
                     return df, f"ZIP file loaded. Found CSV: {inner_file}"
 
-            # Excel inside ZIP
             for inner_file in extracted_files:
                 if inner_file.lower().endswith(".xlsx") or inner_file.lower().endswith(".xls"):
                     excel_path = os.path.join(tmpdir, inner_file)
@@ -190,7 +189,6 @@ def read_uploaded_file(uploaded_file):
                     df = clean_columns(df)
                     return df, f"ZIP file loaded. Found Excel file: {inner_file}"
 
-            # Shapefile inside ZIP
             shp_files = [f for f in extracted_files if f.lower().endswith(".shp")]
 
             if shp_files:
@@ -224,6 +222,59 @@ def add_kpi(label, value, color="#f9fafb"):
         """,
         unsafe_allow_html=True
     )
+
+def build_polygon_map(gdf, value_column, title, color_scale, fit_color_label):
+    """
+    Build a true polygon choropleth map using plotly.
+    """
+    plot_gdf = gdf.copy()
+
+    # Make sure CRS is lat/lon
+    if plot_gdf.crs is None:
+        plot_gdf = plot_gdf.set_crs(epsg=4326, allow_override=True)
+    else:
+        plot_gdf = plot_gdf.to_crs(epsg=4326)
+
+    plot_gdf = plot_gdf.reset_index(drop=True)
+    plot_gdf["poly_id"] = plot_gdf.index.astype(str)
+
+    geojson = json.loads(plot_gdf.to_json())
+
+    # Use representative point for map centering
+    center_geom = plot_gdf.geometry.unary_union.centroid
+    center_lat = center_geom.y
+    center_lon = center_geom.x
+
+    fig = px.choropleth_mapbox(
+        plot_gdf,
+        geojson=geojson,
+        locations="poly_id",
+        featureidkey="properties.poly_id",
+        color=value_column,
+        color_continuous_scale=color_scale,
+        mapbox_style="carto-positron",
+        zoom=13,
+        center={"lat": center_lat, "lon": center_lon},
+        opacity=0.65,
+        hover_data={
+            "poly_id": False,
+            value_column: True
+        }
+    )
+
+    fig.update_traces(
+        marker_line_width=0.3,
+        marker_line_color="rgba(255,255,255,0.35)"
+    )
+
+    fig.update_layout(
+        title=None,
+        height=600,
+        margin=dict(l=0, r=0, t=0, b=0),
+        coloraxis_colorbar_title=fit_color_label
+    )
+
+    return fig
 
 # ---------------------------------
 # Upload section
@@ -325,7 +376,7 @@ if n_file is not None and y_file is not None:
     if "Yield" in merged.columns and "NitrogenRate" in merged.columns:
         merged["N_Efficiency"] = merged["Yield"] / merged["NitrogenRate"]
 
-    # Keep geometry from yield layer if available, otherwise nitrogen layer
+    # Keep geometry from yield if available, otherwise nitrogen
     if "geometry" in y.columns:
         merged["geometry"] = y["geometry"].iloc[:min_len].values
     elif "geometry" in n.columns:
@@ -445,7 +496,7 @@ if n_file is not None and y_file is not None:
     )
 
     # ---------------------------------
-    # Nitrogen rate chart section
+    # Nitrogen rate chart
     # ---------------------------------
     with st.expander("View Nitrogen Rate by Yield Class", expanded=False):
         st.markdown("Compare the original nitrogen rate with the AI-recommended rate for each yield class.")
@@ -506,10 +557,10 @@ if n_file is not None and y_file is not None:
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
-    # Heat maps
+    # Polygon field map
     # ---------------------------------
     if "geometry" in merged.columns:
-        st.subheader("Field Heat Maps")
+        st.subheader("Field Polygon Map")
 
         try:
             gmap = gpd.GeoDataFrame(merged.copy(), geometry="geometry")
@@ -517,74 +568,51 @@ if n_file is not None and y_file is not None:
             if gmap.crs is None:
                 gmap = gmap.set_crs(epsg=4326, allow_override=True)
 
-            # Project first for more accurate centroids
-            gmap_projected = gmap.to_crs(epsg=3857)
-            centroids = gmap_projected.geometry.centroid
-            centroids_geo = gpd.GeoSeries(centroids, crs=3857).to_crs(epsg=4326)
-
-            gmap["lat"] = centroids_geo.y
-            gmap["lon"] = centroids_geo.x
-
+            # Add AI adjustment values back to each field feature
             change_lookup = dict(zip(ai_table["Yield Class"], ai_table["N Change (lb/ac)"]))
             gmap["N Change (lb/ac)"] = gmap["YieldClass"].map(change_lookup)
 
-            map_col1, map_col2 = st.columns(2)
+            map_option = st.selectbox(
+                "Choose map layer",
+                [
+                    "AI Nitrogen Adjustment Map",
+                    "Yield Map"
+                ]
+            )
 
-            with map_col1:
-                st.markdown('<div class="section-card">', unsafe_allow_html=True)
-                st.markdown("### Yield Heat Map")
+            st.markdown('<div class="section-card">', unsafe_allow_html=True)
 
-                fig_yield_map = px.scatter_map(
-                    gmap,
-                    lat="lat",
-                    lon="lon",
-                    color="Yield",
-                    color_continuous_scale="YlGn",
-                    zoom=12,
-                    height=500,
-                    hover_data={
-                        "Yield": True,
-                        "NitrogenRate": True,
-                        "Area_ac": True,
-                        "lat": False,
-                        "lon": False
-                    }
-                )
-                fig_yield_map.update_layout(
-                    margin=dict(l=0, r=0, t=0, b=0)
-                )
-                st.plotly_chart(fig_yield_map, width="stretch", config={"displayModeBar": False})
-                st.markdown('</div>', unsafe_allow_html=True)
+            if map_option == "AI Nitrogen Adjustment Map":
+                st.markdown("### AI Nitrogen Adjustment Map")
+                st.markdown("Red areas suggest reducing nitrogen. Green areas suggest maintaining or increasing nitrogen.")
 
-            with map_col2:
-                st.markdown('<div class="section-card">', unsafe_allow_html=True)
-                st.markdown("### AI Nitrogen Adjustment Heat Map")
-                st.markdown(
-                    "Red areas suggest reducing nitrogen. Green areas suggest maintaining or increasing nitrogen."
+                fig_poly = build_polygon_map(
+                    gdf=gmap,
+                    value_column="N Change (lb/ac)",
+                    title="AI Nitrogen Adjustment Map",
+                    color_scale="RdYlGn",
+                    fit_color_label="N Change (lb/ac)"
                 )
 
-                fig_ai_map = px.scatter_map(
-                    gmap,
-                    lat="lat",
-                    lon="lon",
-                    color="N Change (lb/ac)",
-                    color_continuous_scale="RdYlGn",
-                    zoom=12,
-                    height=500,
-                    hover_data={
-                        "Yield": True,
-                        "NitrogenRate": True,
-                        "N Change (lb/ac)": True,
-                        "Area_ac": True,
-                        "lat": False,
-                        "lon": False
-                    }
+            else:
+                st.markdown("### Yield Map")
+                st.markdown("Lighter areas show lower yield. Darker green areas show stronger yield.")
+
+                fig_poly = build_polygon_map(
+                    gdf=gmap,
+                    value_column="Yield",
+                    title="Yield Map",
+                    color_scale="YlGn",
+                    fit_color_label="Yield"
                 )
-                fig_ai_map.update_layout(
-                    margin=dict(l=0, r=0, t=0, b=0)
-                )
-                st.plotly_chart(fig_ai_map, width="stretch", config={"displayModeBar": False})
-                st.markdown('</div>', unsafe_allow_html=True)
+
+            st.plotly_chart(
+                fig_poly,
+                width="stretch",
+                config={"displayModeBar": False}
+            )
+
+            st.markdown('</div>', unsafe_allow_html=True)
 
         except Exception as e:
-            st.warning(f"Heat maps could not be generated: {e}")
+            st.warning(f"Polygon field map could not be generated: {e}")
