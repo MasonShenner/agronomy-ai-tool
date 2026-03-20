@@ -1,5 +1,0 @@
-streamlit
-pandas
-geopandas
-pyogrio
-openpyxl
