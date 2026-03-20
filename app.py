@@ -290,9 +290,19 @@ def build_point_map(
     range_color=None
 ):
     """
-    Build a clean point-based field map using Plotly Scatter Mapbox.
+    Build a clean point-based field map using Plotly.
     """
     plot_df = df.copy()
+
+    # make sure mapped values are numeric
+    for col in ["lat", "lon", value_column, "Yield", "NitrogenRate", "AI_N_Rate", "N_Change"]:
+        if col in plot_df.columns:
+            plot_df[col] = pd.to_numeric(plot_df[col], errors="coerce")
+
+    plot_df = plot_df.dropna(subset=["lat", "lon", value_column"]).copy()
+
+    if plot_df.empty:
+        return None
 
     center_lat, center_lon, zoom = get_field_center_and_zoom(plot_df)
 
@@ -327,7 +337,7 @@ def build_point_map(
     )
 
     fig.update_layout(
-        mapbox_style="carto-positron",
+        mapbox_style="open-street-map",
         margin=dict(l=0, r=0, t=0, b=0),
         coloraxis_colorbar_title=color_label,
         uirevision=f"{value_column}_point_map"
@@ -498,6 +508,11 @@ if n_file is not None and y_file is not None:
 
     merged["AI_N_Rate"] = merged["YieldClass"].map(ai_rate_lookup)
     merged["N_Change"] = merged["YieldClass"].map(ai_change_lookup)
+    # Force mapped recommendation fields to numeric
+merged["AI_N_Rate"] = pd.to_numeric(merged["AI_N_Rate"], errors="coerce")
+merged["N_Change"] = pd.to_numeric(merged["N_Change"], errors="coerce")
+merged["Yield"] = pd.to_numeric(merged["Yield"], errors="coerce")
+merged["NitrogenRate"] = pd.to_numeric(merged["NitrogenRate"], errors="coerce")
 
     # ---------------------------------
     # Rounded display
@@ -625,50 +640,61 @@ if n_file is not None and y_file is not None:
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
-    # Point field maps
-    # ---------------------------------
-    if "geometry" in merged.columns and GEOPANDAS_AVAILABLE:
-        st.subheader("Field Maps")
+# Point field maps
+# ---------------------------------
+if "geometry" in merged.columns and GEOPANDAS_AVAILABLE:
+    st.subheader("Field Maps")
 
-        try:
-            gmap = gpd.GeoDataFrame(merged.copy(), geometry="geometry")
-            gmap = prepare_point_map_data(gmap)
+    try:
+        gmap = gpd.GeoDataFrame(merged.copy(), geometry="geometry")
+        gmap = prepare_point_map_data(gmap)
 
-            if gmap.empty:
-                st.warning("No valid point geometry was available for mapping.")
-            else:
-                map_tab1, map_tab2 = st.tabs(["Yield Map", "AI Nitrogen Adjustment Map"])
+        if gmap.empty:
+            st.warning("No valid point geometry was available for mapping.")
+        else:
+            map_tab1, map_tab2 = st.tabs(["Yield Map", "AI Nitrogen Adjustment Map"])
 
-                with map_tab1:
-                    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-                    st.markdown("### Yield Map")
-                    st.markdown("This point-based map shows yield variation across the field.")
+            with map_tab1:
+                st.markdown('<div class="section-card">', unsafe_allow_html=True)
+                st.markdown("### Yield Map")
+                st.markdown("This point-based map shows yield variation across the field.")
 
-                    fig_yield = build_point_map(
-                        df=gmap.dropna(subset=["Yield"]).copy(),
-                        value_column="Yield",
-                        color_scale="YlGn",
-                        color_label="Yield",
-                        hover_columns=["Yield", "NitrogenRate", "AI_N_Rate", "N_Change", "YieldClass"]
-                    )
+                yield_df = gmap.dropna(subset=["Yield"]).copy()
 
+                fig_yield = build_point_map(
+                    df=yield_df,
+                    value_column="Yield",
+                    color_scale="YlGn",
+                    color_label="Yield",
+                    hover_columns=["Yield", "NitrogenRate", "AI_N_Rate", "N_Change", "YieldClass"]
+                )
+
+                if fig_yield is None:
+                    st.info("Yield map could not be displayed because no valid mapped yield points were found.")
+                else:
                     st.plotly_chart(
                         fig_yield,
                         width="stretch",
                         config={"displayModeBar": False, "scrollZoom": True}
                     )
-                    st.markdown('</div>', unsafe_allow_html=True)
 
-                with map_tab2:
-                    st.markdown('<div class="section-card">', unsafe_allow_html=True)
-                    st.markdown("### AI Nitrogen Adjustment Map")
-                    st.markdown("Orange-red points suggest reducing nitrogen. Green points suggest maintaining or increasing nitrogen.")
+                st.markdown('</div>', unsafe_allow_html=True)
 
-                    adj_df = gmap.dropna(subset=["N_Change"]).copy()
+            with map_tab2:
+                st.markdown('<div class="section-card">', unsafe_allow_html=True)
+                st.markdown("### AI Nitrogen Adjustment Map")
+                st.markdown("Orange-red points suggest reducing nitrogen. Green points suggest maintaining or increasing nitrogen.")
 
-                    max_abs_change = adj_df["N_Change"].abs().max()
+                adj_df = gmap.dropna(subset=["N_Change"]).copy()
+                adj_df["N_Change"] = pd.to_numeric(adj_df["N_Change"], errors="coerce")
+                adj_df = adj_df.dropna(subset=["N_Change"]).copy()
+
+                if adj_df.empty:
+                    st.info("AI adjustment map could not be displayed because no valid nitrogen adjustment points were found.")
+                else:
+                    max_abs_change = float(adj_df["N_Change"].abs().max())
                     if pd.isna(max_abs_change) or max_abs_change == 0:
-                        max_abs_change = 1
+                        max_abs_change = 1.0
 
                     fig_adj = build_point_map(
                         df=adj_df,
@@ -679,15 +705,19 @@ if n_file is not None and y_file is not None:
                         range_color=[-max_abs_change, max_abs_change]
                     )
 
-                    st.plotly_chart(
-                        fig_adj,
-                        width="stretch",
-                        config={"displayModeBar": False, "scrollZoom": True}
-                    )
-                    st.markdown('</div>', unsafe_allow_html=True)
+                    if fig_adj is None:
+                        st.info("AI adjustment map could not be displayed after cleaning the mapped values.")
+                    else:
+                        st.plotly_chart(
+                            fig_adj,
+                            width="stretch",
+                            config={"displayModeBar": False, "scrollZoom": True}
+                        )
 
-        except Exception as e:
-            st.warning(f"Point field map could not be generated: {e}")
+                st.markdown('</div>', unsafe_allow_html=True)
 
-    elif "geometry" in merged.columns and not GEOPANDAS_AVAILABLE:
-        st.warning("Geometry was found, but geopandas is not installed, so the field map cannot be displayed.")
+    except Exception as e:
+        st.warning(f"Point field map could not be generated: {e}")
+
+elif "geometry" in merged.columns and not GEOPANDAS_AVAILABLE:
+    st.warning("Geometry was found, but geopandas is not installed, so the field map cannot be displayed.")
