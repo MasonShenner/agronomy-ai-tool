@@ -223,55 +223,107 @@ def add_kpi(label, value, color="#f9fafb"):
         unsafe_allow_html=True
     )
 
-def build_polygon_map(gdf, value_column, title, color_scale, fit_color_label):
+def prepare_point_map_data(gdf):
     """
-    Build a true polygon choropleth map using plotly.
+    Converts shapefile geometry into lat/lon for point-based plotting.
+    Supports Point and MultiPoint. Falls back to centroid if needed.
     """
     plot_gdf = gdf.copy()
 
-    # Make sure CRS is lat/lon
     if plot_gdf.crs is None:
         plot_gdf = plot_gdf.set_crs(epsg=4326, allow_override=True)
     else:
         plot_gdf = plot_gdf.to_crs(epsg=4326)
 
-    plot_gdf = plot_gdf.reset_index(drop=True)
-    plot_gdf["poly_id"] = plot_gdf.index.astype(str)
+    geom_types = plot_gdf.geometry.geom_type.astype(str).str.lower()
 
-    geojson = json.loads(plot_gdf.to_json())
+    if geom_types.isin(["point"]).all():
+        plot_gdf["lon"] = plot_gdf.geometry.x
+        plot_gdf["lat"] = plot_gdf.geometry.y
+    elif geom_types.isin(["multipoint"]).all():
+        plot_gdf["lon"] = plot_gdf.geometry.centroid.x
+        plot_gdf["lat"] = plot_gdf.geometry.centroid.y
+    else:
+        plot_gdf["lon"] = plot_gdf.geometry.centroid.x
+        plot_gdf["lat"] = plot_gdf.geometry.centroid.y
 
-    # Use representative point for map centering
-    center_geom = plot_gdf.geometry.unary_union.centroid
-    center_lat = center_geom.y
-    center_lon = center_geom.x
+    plot_gdf = plot_gdf.dropna(subset=["lat", "lon"]).copy()
+    return plot_gdf
 
-    fig = px.choropleth_mapbox(
-        plot_gdf,
-        geojson=geojson,
-        locations="poly_id",
-        featureidkey="properties.poly_id",
+def get_field_center_and_zoom(df):
+    """
+    Auto-center and auto-zoom based on point spread.
+    """
+    center_lat = df["lat"].median()
+    center_lon = df["lon"].median()
+
+    lat_range = df["lat"].max() - df["lat"].min()
+    lon_range = df["lon"].max() - df["lon"].min()
+    max_range = max(lat_range, lon_range)
+
+    if max_range < 0.002:
+        zoom = 16
+    elif max_range < 0.005:
+        zoom = 15
+    elif max_range < 0.01:
+        zoom = 14
+    elif max_range < 0.03:
+        zoom = 13
+    else:
+        zoom = 12
+
+    return center_lat, center_lon, zoom
+
+def build_point_map(
+    df,
+    value_column,
+    color_scale,
+    color_label,
+    hover_columns,
+    range_color=None
+):
+    """
+    Build a clean point-based field map using Plotly Scatter Mapbox.
+    """
+    plot_df = df.copy()
+
+    center_lat, center_lon, zoom = get_field_center_and_zoom(plot_df)
+
+    point_size = 8
+    if len(plot_df) > 10000:
+        point_size = 4
+    elif len(plot_df) > 5000:
+        point_size = 5
+    elif len(plot_df) > 2500:
+        point_size = 6
+
+    hover_data = {}
+    for col in hover_columns:
+        if col in plot_df.columns:
+            hover_data[col] = True
+
+    fig = px.scatter_mapbox(
+        plot_df,
+        lat="lat",
+        lon="lon",
         color=value_column,
         color_continuous_scale=color_scale,
-        mapbox_style="carto-positron",
-        zoom=13,
+        range_color=range_color,
+        hover_data=hover_data,
+        zoom=zoom,
         center={"lat": center_lat, "lon": center_lon},
-        opacity=0.65,
-        hover_data={
-            "poly_id": False,
-            value_column: True
-        }
+        height=600
     )
 
     fig.update_traces(
-        marker_line_width=0.3,
-        marker_line_color="rgba(255,255,255,0.35)"
+        marker=dict(size=point_size, opacity=0.82)
     )
 
     fig.update_layout(
-        title=None,
-        height=600,
+        mapbox_style="carto-positron",
         margin=dict(l=0, r=0, t=0, b=0),
-        coloraxis_colorbar_title=fit_color_label
+        coloraxis_colorbar_title=color_label,
+        uirevision=f"{value_column}_point_map"
     )
 
     return fig
@@ -432,6 +484,15 @@ if n_file is not None and y_file is not None:
     ai_table["N Change (lb/ac)"] = ai_table["AI N Rate (lb/ac)"] - ai_table["N Rate (lb/ac)"]
 
     # ---------------------------------
+    # Map AI values back to points
+    # ---------------------------------
+    ai_rate_lookup = dict(zip(ai_table["Yield Class"], ai_table["AI N Rate (lb/ac)"]))
+    ai_change_lookup = dict(zip(ai_table["Yield Class"], ai_table["N Change (lb/ac)"]))
+
+    merged["AI_N_Rate"] = merged["YieldClass"].map(ai_rate_lookup)
+    merged["N_Change"] = merged["YieldClass"].map(ai_change_lookup)
+
+    # ---------------------------------
     # Rounded display
     # ---------------------------------
     summary_display = summary.copy()
@@ -557,62 +618,69 @@ if n_file is not None and y_file is not None:
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
-    # Polygon field map
+    # Point field maps
     # ---------------------------------
-    if "geometry" in merged.columns:
-        st.subheader("Field Polygon Map")
+    if "geometry" in merged.columns and GEOPANDAS_AVAILABLE:
+        st.subheader("Field Maps")
 
         try:
             gmap = gpd.GeoDataFrame(merged.copy(), geometry="geometry")
+            gmap = prepare_point_map_data(gmap)
 
-            if gmap.crs is None:
-                gmap = gmap.set_crs(epsg=4326, allow_override=True)
-
-            # Add AI adjustment values back to each field feature
-            change_lookup = dict(zip(ai_table["Yield Class"], ai_table["N Change (lb/ac)"]))
-            gmap["N Change (lb/ac)"] = gmap["YieldClass"].map(change_lookup)
-
-            map_option = st.selectbox(
-                "Choose map layer",
-                [
-                    "AI Nitrogen Adjustment Map",
-                    "Yield Map"
-                ]
-            )
-
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-
-            if map_option == "AI Nitrogen Adjustment Map":
-                st.markdown("### AI Nitrogen Adjustment Map")
-                st.markdown("Red areas suggest reducing nitrogen. Green areas suggest maintaining or increasing nitrogen.")
-
-                fig_poly = build_polygon_map(
-                    gdf=gmap,
-                    value_column="N Change (lb/ac)",
-                    title="AI Nitrogen Adjustment Map",
-                    color_scale="RdYlGn",
-                    fit_color_label="N Change (lb/ac)"
-                )
-
+            if gmap.empty:
+                st.warning("No valid point geometry was available for mapping.")
             else:
-                st.markdown("### Yield Map")
-                st.markdown("Lighter areas show lower yield. Darker green areas show stronger yield.")
+                map_tab1, map_tab2 = st.tabs(["Yield Map", "AI Nitrogen Adjustment Map"])
 
-                fig_poly = build_polygon_map(
-                    gdf=gmap,
-                    value_column="Yield",
-                    title="Yield Map",
-                    color_scale="YlGn",
-                    fit_color_label="Yield"
-                )
+                with map_tab1:
+                    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+                    st.markdown("### Yield Map")
+                    st.markdown("This point-based map shows yield variation across the field.")
 
-            st.plotly_chart(
-                fig_poly,
-                width="stretch",
-                config={"displayModeBar": False}
-            )
+                    fig_yield = build_point_map(
+                        df=gmap.dropna(subset=["Yield"]).copy(),
+                        value_column="Yield",
+                        color_scale="YlGn",
+                        color_label="Yield",
+                        hover_columns=["Yield", "NitrogenRate", "AI_N_Rate", "N_Change", "YieldClass"]
+                    )
 
-            st.markdown('</div>', unsafe_allow_html=True)
+                    st.plotly_chart(
+                        fig_yield,
+                        width="stretch",
+                        config={"displayModeBar": False, "scrollZoom": True}
+                    )
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                with map_tab2:
+                    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+                    st.markdown("### AI Nitrogen Adjustment Map")
+                    st.markdown("Orange-red points suggest reducing nitrogen. Green points suggest maintaining or increasing nitrogen.")
+
+                    adj_df = gmap.dropna(subset=["N_Change"]).copy()
+
+                    max_abs_change = adj_df["N_Change"].abs().max()
+                    if pd.isna(max_abs_change) or max_abs_change == 0:
+                        max_abs_change = 1
+
+                    fig_adj = build_point_map(
+                        df=adj_df,
+                        value_column="N_Change",
+                        color_scale="RdYlGn",
+                        color_label="N Change (lb/ac)",
+                        hover_columns=["Yield", "NitrogenRate", "AI_N_Rate", "N_Change", "YieldClass"],
+                        range_color=[-max_abs_change, max_abs_change]
+                    )
+
+                    st.plotly_chart(
+                        fig_adj,
+                        width="stretch",
+                        config={"displayModeBar": False, "scrollZoom": True}
+                    )
+                    st.markdown('</div>', unsafe_allow_html=True)
 
         except Exception as e:
-            st.warning(f"Polygon field map could not be generated: {e}")
+            st.warning(f"Point field map could not be generated: {e}")
+
+    elif "geometry" in merged.columns and not GEOPANDAS_AVAILABLE:
+        st.warning("Geometry was found, but geopandas is not installed, so the field map cannot be displayed.")
