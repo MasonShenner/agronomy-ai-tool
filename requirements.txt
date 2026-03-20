@@ -1,6 +1,0 @@
-streamlit
-pandas
-geopandas
-fiona
-pyogrio
-openpyxl
