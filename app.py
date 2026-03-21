@@ -552,39 +552,6 @@ if n_file is not None and y_file is not None:
         st.markdown('</div>', unsafe_allow_html=True)
 
     with table_col2:
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.markdown("### AI Recommendation")
-        st.dataframe(ai_display, width="stretch", hide_index=True)
-        st.markdown('</div>', unsafe_allow_html=True)
-
-    # ---------------------------------
-    # Two-map field viewer
-    # ---------------------------------
-    if "geometry" in merged.columns and GEOPANDAS_AVAILABLE:
-        st.subheader("Field Map Viewer")
-
-        try:
-            gmap = gpd.GeoDataFrame(merged.copy(), geometry="geometry")
-
-            if gmap.crs is None:
-                gmap = gmap.set_crs(epsg=4326, allow_override=True)
-
-            gmap = gmap.to_crs(epsg=4326)
-            gmap["lon"] = gmap.geometry.x
-            gmap["lat"] = gmap.geometry.y
-
-            ai_rate_lookup = dict(zip(ai_table["Yield Class"], ai_table["AI N Rate (lb/ac)"]))
-            gmap["AI_N_Rate"] = gmap["YieldClass"].map(ai_rate_lookup)
-
-            gmap["Yield"] = pd.to_numeric(gmap["Yield"], errors="coerce")
-            gmap["NitrogenRate"] = pd.to_numeric(gmap["NitrogenRate"], errors="coerce")
-            gmap["AI_N_Rate"] = pd.to_numeric(gmap["AI_N_Rate"], errors="coerce")
-
-            gmap["DisplayYield"] = gmap["Yield"].round(1)
-            gmap["DisplayOriginalN"] = gmap["NitrogenRate"].round(1)
-            gmap["DisplayAIN"] = gmap["AI_N_Rate"].round(1)
-            gmap["DisplayClass"] = gmap["YieldClass"].astype(str)
-
             st.markdown('<div class="section-card">', unsafe_allow_html=True)
 
             map_choice = st.selectbox(
@@ -592,25 +559,25 @@ if n_file is not None and y_file is not None:
                 ["Original Nitrogen Applied", "AI Recommended Nitrogen Rate"]
             )
 
-if map_choice == "Original Nitrogen Applied":
-    gmap["LegendRange"], range_order = make_rate_range_labels(gmap["NitrogenRate"], bins=6, decimals=1)
-    gmap = gmap.dropna(subset=["LegendRange"])
-    range_order = [r for r in range_order if str(r) != "nan"]
+            if map_choice == "Original Nitrogen Applied":
+                gmap["LegendRange"], range_order = make_rate_range_labels(gmap["NitrogenRate"], bins=6, decimals=1)
+                gmap = gmap.dropna(subset=["LegendRange"])
+                range_order = [r for r in range_order if str(r) != "nan"]
 
-    map_title = "Original Nitrogen Applied Map"
-    map_note = "This map shows the nitrogen rate that was originally applied across the field."
-    hover_rate_label = "N Applied"
-    custom_cols = ["DisplayOriginalN", "DisplayYield", "DisplayClass"]
+                map_title = "Original Nitrogen Applied Map"
+                map_note = "This map shows the nitrogen rate that was originally applied across the field."
+                hover_rate_label = "N Applied"
+                custom_cols = ["DisplayOriginalN", "DisplayYield", "DisplayClass"]
 
-else:
-    gmap["LegendRange"], range_order = make_rate_range_labels(gmap["AI_N_Rate"], bins=6, decimals=1)
-    gmap = gmap.dropna(subset=["LegendRange"])
-    range_order = [r for r in range_order if str(r) != "nan"]
+            else:
+                gmap["LegendRange"], range_order = make_rate_range_labels(gmap["AI_N_Rate"], bins=6, decimals=1)
+                gmap = gmap.dropna(subset=["LegendRange"])
+                range_order = [r for r in range_order if str(r) != "nan"]
 
-    map_title = "AI Recommended Nitrogen Rate Map"
-    map_note = "This map shows the AI-recommended nitrogen rate by field area."
-    hover_rate_label = "AI Rate"
-    custom_cols = ["DisplayAIN", "DisplayYield", "DisplayClass"]
+                map_title = "AI Recommended Nitrogen Rate Map"
+                map_note = "This map shows the AI-recommended nitrogen rate by field area."
+                hover_rate_label = "AI Rate"
+                custom_cols = ["DisplayAIN", "DisplayYield", "DisplayClass"]
 
             st.markdown(f"### {map_title}")
             st.markdown(map_note)
@@ -665,6 +632,4 @@ else:
             )
 
             st.markdown('</div>', unsafe_allow_html=True)
-
-        except Exception as e:
             st.warning(f"Field map could not be generated: {e}")
