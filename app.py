@@ -228,6 +228,23 @@ def add_kpi(label, value, color="#f9fafb"):
     )
 
 
+def classify_n_change(x):
+    if pd.isna(x):
+        return "Unknown"
+    if x <= -10:
+        return "Reduce >10 lb/ac"
+    elif x <= -5:
+        return "Reduce 5–10 lb/ac"
+    elif x < 0:
+        return "Reduce 0–5 lb/ac"
+    elif x == 0:
+        return "No major change"
+    elif x <= 5:
+        return "Increase 0–5 lb/ac"
+    else:
+        return "Increase >5 lb/ac"
+
+
 # ---------------------------------
 # Upload section
 # ---------------------------------
@@ -302,7 +319,6 @@ if n_file is not None and y_file is not None:
     n = n_df.copy()
     y = y_df.copy()
 
-    # Assumes DISTANCE and SWATHWIDTH are in feet
     SQFT_TO_ACRES = 1 / 43560
 
     if "DISTANCE" in n.columns and "SWATHWIDTH" in n.columns:
@@ -329,7 +345,6 @@ if n_file is not None and y_file is not None:
     if "Yield" in merged.columns and "NitrogenRate" in merged.columns:
         merged["N_Efficiency"] = merged["Yield"] / merged["NitrogenRate"]
 
-    # Keep point geometry for field map
     if "geometry" in y.columns:
         merged["geometry"] = y["geometry"].iloc[:min_len].values
     elif "geometry" in n.columns:
@@ -345,7 +360,8 @@ if n_file is not None and y_file is not None:
     merged["YieldClass"] = pd.qcut(
         merged["Yield"],
         5,
-        labels=["Very Low", "Low", "Medium", "High", "Very High"]
+        labels=["Very Low", "Low", "Medium", "High", "Very High"],
+        duplicates="drop"
     )
 
     summary = merged.groupby("YieldClass", observed=False).agg({
@@ -521,16 +537,43 @@ if n_file is not None and y_file is not None:
             if gmap.crs is None:
                 gmap = gmap.set_crs(epsg=4326, allow_override=True)
 
-            # Convert to lat/lon for web map display
             gmap = gmap.to_crs(epsg=4326)
 
-            # Use representative point geometry directly since your JD exports are point-based
             gmap["lon"] = gmap.geometry.x
             gmap["lat"] = gmap.geometry.y
 
-            # Map AI change by yield class back to each point
             change_lookup = dict(zip(ai_table["Yield Class"], ai_table["N Change (lb/ac)"]))
+            ai_rate_lookup = dict(zip(ai_table["Yield Class"], ai_table["AI N Rate (lb/ac)"]))
+
             gmap["N Change (lb/ac)"] = gmap["YieldClass"].map(change_lookup)
+            gmap["AI N Rate (lb/ac)"] = gmap["YieldClass"].map(ai_rate_lookup)
+
+            gmap["N Change Rounded"] = gmap["N Change (lb/ac)"].round(1)
+            gmap["Yield Rounded"] = gmap["Yield"].round(1)
+            gmap["NitrogenRate Rounded"] = gmap["NitrogenRate"].round(1)
+            gmap["AI N Rate Rounded"] = gmap["AI N Rate (lb/ac)"].round(1)
+            gmap["N Efficiency Rounded"] = gmap["N_Efficiency"].round(2)
+            gmap["Area Rounded"] = gmap["Area_ac"].round(2)
+
+            gmap["N Change Category"] = gmap["N Change (lb/ac)"].apply(classify_n_change)
+
+            category_order = [
+                "Reduce >10 lb/ac",
+                "Reduce 5–10 lb/ac",
+                "Reduce 0–5 lb/ac",
+                "No major change",
+                "Increase 0–5 lb/ac",
+                "Increase >5 lb/ac"
+            ]
+
+            color_map = {
+                "Reduce >10 lb/ac": "#d73027",
+                "Reduce 5–10 lb/ac": "#fc8d59",
+                "Reduce 0–5 lb/ac": "#fee08b",
+                "No major change": "#d9d9d9",
+                "Increase 0–5 lb/ac": "#91cf60",
+                "Increase >5 lb/ac": "#1a9850"
+            }
 
             st.markdown('<div class="section-card">', unsafe_allow_html=True)
             st.markdown("### AI Nitrogen Adjustment Map")
@@ -542,27 +585,48 @@ if n_file is not None and y_file is not None:
                 gmap,
                 lat="lat",
                 lon="lon",
-                color="N Change (lb/ac)",
-                color_continuous_scale="RdYlGn",
+                color="N Change Category",
+                category_orders={"N Change Category": category_order},
+                color_discrete_map=color_map,
                 zoom=12,
                 height=650,
                 hover_data={
-                    "Yield": True,
-                    "NitrogenRate": True,
-                    "N_Efficiency": True,
-                    "N Change (lb/ac)": True,
-                    "Area_ac": True,
+                    "YieldClass": True,
+                    "Yield Rounded": True,
+                    "NitrogenRate Rounded": True,
+                    "AI N Rate Rounded": True,
+                    "N Efficiency Rounded": True,
+                    "N Change Rounded": True,
+                    "Area Rounded": True,
+                    "N Change Category": True,
+                    "Yield": False,
+                    "NitrogenRate": False,
+                    "AI N Rate (lb/ac)": False,
+                    "N_Efficiency": False,
+                    "N Change (lb/ac)": False,
+                    "Area_ac": False,
                     "lat": False,
                     "lon": False
                 }
             )
 
             fig_ai_map.update_traces(
-                marker=dict(size=7, opacity=0.75)
+                marker=dict(size=7, opacity=0.75),
+                hovertemplate=(
+                    "<b>Yield Class:</b> %{customdata[0]}<br>"
+                    "<b>Yield:</b> %{customdata[1]} bu/ac<br>"
+                    "<b>Original N Rate:</b> %{customdata[2]} lb/ac<br>"
+                    "<b>AI N Rate:</b> %{customdata[3]} lb/ac<br>"
+                    "<b>N Efficiency:</b> %{customdata[4]}<br>"
+                    "<b>N Change:</b> %{customdata[5]} lb/ac<br>"
+                    "<b>Area:</b> %{customdata[6]} ac<br>"
+                    "<b>Adjustment:</b> %{customdata[7]}<extra></extra>"
+                )
             )
 
             fig_ai_map.update_layout(
-                margin=dict(l=0, r=0, t=0, b=0)
+                margin=dict(l=0, r=0, t=0, b=0),
+                legend_title_text="N Adjustment"
             )
 
             st.plotly_chart(
