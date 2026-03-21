@@ -592,7 +592,7 @@ if n_file is not None and y_file is not None:
                 ["Original Nitrogen Applied", "AI Recommended Nitrogen Rate"]
             )
 
-            if map_choice == "Original Nitrogen Applied":
+if map_choice == "Original Nitrogen Applied":
     gmap["LegendRange"], range_order = make_rate_range_labels(gmap["NitrogenRate"], bins=6, decimals=1)
     gmap = gmap.dropna(subset=["LegendRange"])
     range_order = [r for r in range_order if str(r) != "nan"]
