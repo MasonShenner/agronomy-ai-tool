@@ -554,6 +554,8 @@ if n_file is not None and y_file is not None:
     with table_col2:
             st.markdown('<div class="section-card">', unsafe_allow_html=True)
 
+            st.markdown("### Field Map")
+
             map_choice = st.selectbox(
                 "Map Selection",
                 ["Original Nitrogen Applied", "AI Recommended Nitrogen Rate"]
