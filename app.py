@@ -1,7 +1,7 @@
 import os
 import zipfile
 import tempfile
-import numpy as np
+
 import pandas as pd
 import streamlit as st
 import plotly.express as px
@@ -119,6 +119,10 @@ st.markdown(
         font-size: 0.88rem;
         margin-top: 0.2rem;
     }
+
+    div[data-baseweb="select"] > div {
+        border-radius: 12px !important;
+    }
     </style>
     """,
     unsafe_allow_html=True
@@ -226,93 +230,52 @@ def add_kpi(label, value, color="#f9fafb"):
     )
 
 
-def safe_qcut(series, q=5, labels=None):
+def safe_qcut(series, q, labels):
     try:
         return pd.qcut(series, q=q, labels=labels, duplicates="drop")
-    except Exception:
-        ranks = series.rank(method="first")
-        return pd.qcut(ranks, q=q, labels=labels, duplicates="drop")
+    except ValueError:
+        ranked = series.rank(method="first")
+        return pd.qcut(ranked, q=q, labels=labels, duplicates="drop")
 
 
-def build_range_labels(series, unit="", bins_count=5, decimals=1):
-    clean = pd.to_numeric(series, errors="coerce").dropna()
+def make_rate_range_labels(series, bins=6, decimals=1):
+    s = pd.to_numeric(series, errors="coerce")
+    valid = s.dropna()
 
-    if clean.empty:
+    if valid.empty:
         return pd.Series(["Unknown"] * len(series), index=series.index), ["Unknown"]
 
-    min_val = float(clean.min())
-    max_val = float(clean.max())
+    min_val = float(valid.min())
+    max_val = float(valid.max())
 
-    if np.isclose(min_val, max_val):
-        single_label = f"{round(min_val, decimals)} {unit}".strip()
-        return pd.Series([single_label] * len(series), index=series.index), [single_label]
+    if min_val == max_val:
+        label = f"{round(min_val, decimals)} lb/ac"
+        return pd.Series([label] * len(series), index=series.index), [label]
 
-    edges = np.linspace(min_val, max_val, bins_count + 1)
-    edges[0] = min_val
-    edges[-1] = max_val
+    edges = pd.Series(
+        [min_val + (max_val - min_val) * i / bins for i in range(bins + 1)]
+    ).round(decimals)
+
+    # ensure strictly increasing edges
+    for i in range(1, len(edges)):
+        if edges.iloc[i] <= edges.iloc[i - 1]:
+            edges.iloc[i] = round(edges.iloc[i - 1] + (10 ** -decimals), decimals)
 
     labels = []
     for i in range(len(edges) - 1):
-        low = round(edges[i], decimals)
-        high = round(edges[i + 1], decimals)
-        labels.append(f"{low} to {high} {unit}".strip())
+        low = edges.iloc[i]
+        high = edges.iloc[i + 1]
+        labels.append(f"{low:.{decimals}f}–{high:.{decimals}f} lb/ac")
 
-    binned = pd.cut(
-        series,
-        bins=edges,
+    categorized = pd.cut(
+        s,
+        bins=edges.tolist(),
         labels=labels,
         include_lowest=True,
         duplicates="drop"
     )
 
-    return binned.astype(str), labels
-
-
-def build_change_range_labels(series, unit="lb/ac", decimals=1):
-    clean = pd.to_numeric(series, errors="coerce").dropna()
-
-    if clean.empty:
-        return pd.Series(["Unknown"] * len(series), index=series.index), ["Unknown"]
-
-    min_val = float(clean.min())
-    max_val = float(clean.max())
-
-    if np.isclose(min_val, max_val):
-        single_label = f"{round(min_val, decimals)} {unit}".strip()
-        return pd.Series([single_label] * len(series), index=series.index), [single_label]
-
-    edges = np.linspace(min_val, max_val, 6)
-    labels = []
-    for i in range(len(edges) - 1):
-        low = round(edges[i], decimals)
-        high = round(edges[i + 1], decimals)
-        labels.append(f"{low} to {high} {unit}")
-
-    binned = pd.cut(
-        series,
-        bins=edges,
-        labels=labels,
-        include_lowest=True,
-        duplicates="drop"
-    )
-
-    return binned.astype(str), labels
-
-
-def format_hover_template(metric_label, metric_unit, extra_lines):
-    metric_unit_text = f" {metric_unit}" if metric_unit else ""
-    hover = (
-        "<b>Yield Class:</b> %{customdata[0]}<br>"
-        "<b>" + metric_label + ":</b> %{customdata[1]}" + metric_unit_text
-    )
-
-    for idx, line in enumerate(extra_lines, start=2):
-        hover += "<br><b>" + line["label"] + ":</b> %{customdata[" + str(idx) + "]}"
-        if line.get("unit"):
-            hover += " " + line["unit"]
-
-    hover += "<extra></extra>"
-    return hover
+    return categorized.astype(str), labels
 
 
 # ---------------------------------
@@ -429,8 +392,8 @@ if n_file is not None and y_file is not None:
 
     merged["YieldClass"] = safe_qcut(
         merged["Yield"],
-        q=5,
-        labels=["Very Low", "Low", "Medium", "High", "Very High"]
+        5,
+        ["Very Low", "Low", "Medium", "High", "Very High"]
     )
 
     summary = merged.groupby("YieldClass", observed=False).agg({
@@ -595,7 +558,7 @@ if n_file is not None and y_file is not None:
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
-    # Map section
+    # Two-map field viewer
     # ---------------------------------
     if "geometry" in merged.columns and GEOPANDAS_AVAILABLE:
         st.subheader("Field Map Viewer")
@@ -610,173 +573,90 @@ if n_file is not None and y_file is not None:
             gmap["lon"] = gmap.geometry.x
             gmap["lat"] = gmap.geometry.y
 
-            change_lookup = dict(zip(ai_table["Yield Class"], ai_table["N Change (lb/ac)"]))
             ai_rate_lookup = dict(zip(ai_table["Yield Class"], ai_table["AI N Rate (lb/ac)"]))
-            avg_yield_lookup = dict(zip(ai_table["Yield Class"], ai_table["Yield (bu/ac)"]))
-
             gmap["AI_N_Rate"] = gmap["YieldClass"].map(ai_rate_lookup)
-            gmap["N_Change"] = gmap["YieldClass"].map(change_lookup)
-            gmap["Predicted_Yield"] = gmap["YieldClass"].map(avg_yield_lookup)
 
             gmap["Yield"] = pd.to_numeric(gmap["Yield"], errors="coerce")
             gmap["NitrogenRate"] = pd.to_numeric(gmap["NitrogenRate"], errors="coerce")
             gmap["AI_N_Rate"] = pd.to_numeric(gmap["AI_N_Rate"], errors="coerce")
-            gmap["N_Efficiency"] = pd.to_numeric(gmap["N_Efficiency"], errors="coerce")
-            gmap["N_Change"] = pd.to_numeric(gmap["N_Change"], errors="coerce")
-            gmap["Predicted_Yield"] = pd.to_numeric(gmap["Predicted_Yield"], errors="coerce")
 
-            map_col1, map_col2 = st.columns([1, 3])
-
-            with map_col1:
-                st.markdown('<div class="section-card">', unsafe_allow_html=True)
-                map_view = st.selectbox(
-                    "Select map view",
-                    [
-                        "Original Nitrogen Applied",
-                        "AI Recommended Nitrogen Rate",
-                        "Yield",
-                        "Nitrogen Efficiency",
-                        "Nitrogen Change"
-                    ]
-                )
-                st.markdown('</div>', unsafe_allow_html=True)
-
-            if map_view == "Original Nitrogen Applied":
-                color_value = "NitrogenRate"
-                legend_title = "Original N Rate Range"
-                map_title = "Original Nitrogen Applied Map"
-                unit = "lb/ac"
-                range_col, range_order = build_range_labels(gmap[color_value], unit=unit, bins_count=5, decimals=1)
-                gmap["MapRange"] = range_col
-
-                hover_fields = [
-                    {"label": "Yield", "value_col": "Yield", "unit": "bu/ac", "decimals": 1},
-                    {"label": "Yield Class", "value_col": "YieldClass", "unit": "", "decimals": None}
-                ]
-                note_text = "This map shows the original nitrogen rate applied across the field."
-
-            elif map_view == "AI Recommended Nitrogen Rate":
-                color_value = "AI_N_Rate"
-                legend_title = "AI N Rate Range"
-                map_title = "AI Recommended Nitrogen Rate Map"
-                unit = "lb/ac"
-                range_col, range_order = build_range_labels(gmap[color_value], unit=unit, bins_count=5, decimals=1)
-                gmap["MapRange"] = range_col
-
-                hover_fields = [
-                    {"label": "Original N Rate", "value_col": "NitrogenRate", "unit": "lb/ac", "decimals": 1},
-                    {"label": "Yield Class", "value_col": "YieldClass", "unit": "", "decimals": None}
-                ]
-                note_text = "This map shows the AI-generated nitrogen rate that could be applied by area."
-
-            elif map_view == "Yield":
-                color_value = "Yield"
-                legend_title = "Yield Range"
-                map_title = "Yield Map"
-                unit = "bu/ac"
-                range_col, range_order = build_range_labels(gmap[color_value], unit=unit, bins_count=5, decimals=1)
-                gmap["MapRange"] = range_col
-
-                hover_fields = [
-                    {"label": "Original N Rate", "value_col": "NitrogenRate", "unit": "lb/ac", "decimals": 1},
-                    {"label": "Yield Class", "value_col": "YieldClass", "unit": "", "decimals": None}
-                ]
-                note_text = "This map shows harvested yield by point across the field."
-
-            elif map_view == "Nitrogen Efficiency":
-                color_value = "N_Efficiency"
-                legend_title = "N Efficiency Range"
-                map_title = "Nitrogen Efficiency Map"
-                unit = ""
-                range_col, range_order = build_range_labels(gmap[color_value], unit=unit, bins_count=5, decimals=2)
-                gmap["MapRange"] = range_col
-
-                hover_fields = [
-                    {"label": "Yield", "value_col": "Yield", "unit": "bu/ac", "decimals": 1},
-                    {"label": "Original N Rate", "value_col": "NitrogenRate", "unit": "lb/ac", "decimals": 1}
-                ]
-                note_text = "This map shows how efficiently nitrogen performed across different parts of the field."
-
-            else:
-                color_value = "N_Change"
-                legend_title = "N Change Range"
-                map_title = "Nitrogen Change Map"
-                unit = "lb/ac"
-                range_col, range_order = build_change_range_labels(gmap[color_value], unit=unit, decimals=1)
-                gmap["MapRange"] = range_col
-
-                hover_fields = [
-                    {"label": "Original N Rate", "value_col": "NitrogenRate", "unit": "lb/ac", "decimals": 1},
-                    {"label": "AI N Rate", "value_col": "AI_N_Rate", "unit": "lb/ac", "decimals": 1}
-                ]
-                note_text = "This map shows the difference between the original rate and the AI recommended rate."
-
-            # Build clean display values for hover
-            primary_display_col = "PrimaryDisplayValue"
-            if unit:
-                gmap[primary_display_col] = gmap[color_value].round(1)
-            else:
-                gmap[primary_display_col] = gmap[color_value].round(2)
-
-            custom_data_cols = ["YieldClass", primary_display_col]
-            extra_hover_defs = []
-
-            for field in hover_fields:
-                col_name = f"hover_{field['label'].replace(' ', '_')}"
-                if field["decimals"] is None:
-                    gmap[col_name] = gmap[field["value_col"]].astype(str)
-                else:
-                    gmap[col_name] = pd.to_numeric(gmap[field["value_col"]], errors="coerce").round(field["decimals"])
-                custom_data_cols.append(col_name)
-                extra_hover_defs.append({"label": field["label"], "unit": field["unit"]})
-
-            # Color palette
-            if map_view == "Nitrogen Change":
-                color_sequence = px.colors.diverging.RdYlGn
-            elif map_view == "Yield":
-                color_sequence = px.colors.sequential.YlGn
-            elif map_view == "Nitrogen Efficiency":
-                color_sequence = px.colors.sequential.Tealgrn
-            else:
-                color_sequence = px.colors.sequential.Blues
+            gmap["DisplayYield"] = gmap["Yield"].round(1)
+            gmap["DisplayOriginalN"] = gmap["NitrogenRate"].round(1)
+            gmap["DisplayAIN"] = gmap["AI_N_Rate"].round(1)
+            gmap["DisplayClass"] = gmap["YieldClass"].astype(str)
 
             st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            st.markdown(f"### {map_title}")
-            st.markdown(note_text)
 
-            fig_ai_map = px.scatter_map(
+            map_choice = st.selectbox(
+                "Map Selection",
+                ["Original Nitrogen Applied", "AI Recommended Nitrogen Rate"]
+            )
+
+            if map_choice == "Original Nitrogen Applied":
+                gmap["LegendRange"], range_order = make_rate_range_labels(gmap["NitrogenRate"], bins=6, decimals=1)
+                map_title = "Original Nitrogen Applied Map"
+                map_note = "This map shows the nitrogen rate that was originally applied across the field."
+                hover_rate_label = "N Applied"
+                custom_cols = ["DisplayOriginalN", "DisplayYield", "DisplayClass"]
+            else:
+                gmap["LegendRange"], range_order = make_rate_range_labels(gmap["AI_N_Rate"], bins=6, decimals=1)
+                map_title = "AI Recommended Nitrogen Rate Map"
+                map_note = "This map shows the AI-recommended nitrogen rate by field area."
+                hover_rate_label = "AI Rate"
+                custom_cols = ["DisplayAIN", "DisplayYield", "DisplayClass"]
+
+            st.markdown(f"### {map_title}")
+            st.markdown(map_note)
+
+            color_map = {
+                range_order[0]: "#ff0000",
+                range_order[1]: "#ff7a00" if len(range_order) > 1 else "#ff0000",
+                range_order[2]: "#ffd400" if len(range_order) > 2 else "#ff7a00",
+                range_order[3]: "#b7e000" if len(range_order) > 3 else "#ffd400",
+                range_order[4]: "#4fd000" if len(range_order) > 4 else "#b7e000",
+                range_order[5]: "#00a83a" if len(range_order) > 5 else "#4fd000",
+            }
+
+            fig_map = px.scatter_map(
                 gmap,
                 lat="lat",
                 lon="lon",
-                color="MapRange",
-                category_orders={"MapRange": range_order},
-                color_discrete_sequence=color_sequence,
+                color="LegendRange",
+                category_orders={"LegendRange": range_order},
+                color_discrete_map=color_map,
                 zoom=12,
                 height=650,
-                custom_data=custom_data_cols
+                custom_data=custom_cols
             )
 
-            hover_template = format_hover_template(
-                metric_label=map_view,
-                metric_unit=unit,
-                extra_lines=extra_hover_defs
+            fig_map.update_traces(
+                marker=dict(size=6, opacity=0.88),
+                hovertemplate=(
+                    f"<b>{hover_rate_label}:</b> " + "%{customdata[0]} lb/ac<br>"
+                    "<b>Yield:</b> %{customdata[1]} bu/ac<br>"
+                    "<b>Class:</b> %{customdata[2]}"
+                    "<extra></extra>"
+                )
             )
 
-            fig_ai_map.update_traces(
-                marker=dict(size=6, opacity=0.78),
-                hovertemplate=hover_template
-            )
-
-            fig_ai_map.update_layout(
+            fig_map.update_layout(
                 margin=dict(l=0, r=0, t=0, b=0),
-                legend_title_text=legend_title
+                legend_title_text="Nitrogen Rate",
+                legend=dict(
+                    orientation="v",
+                    yanchor="top",
+                    y=0.98,
+                    xanchor="left",
+                    x=1.01
+                )
             )
 
             st.plotly_chart(
-                fig_ai_map,
+                fig_map,
                 width="stretch",
                 config={"displayModeBar": False}
             )
+
             st.markdown('</div>', unsafe_allow_html=True)
 
         except Exception as e:
