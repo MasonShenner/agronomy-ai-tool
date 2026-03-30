@@ -19,9 +19,9 @@ except ImportError:
 # Page setup
 # ---------------------------------
 st.set_page_config(
-    page_title="Agronomy AI Tool",
+    page_title="Nitrogen Management Decision Support Tool",
     layout="wide",
-    page_icon="🌾"
+    page_icon="🚜"
 )
 
 # ---------------------------------
