@@ -608,7 +608,7 @@ if n_file is not None and y_file is not None:
             else:
                 gmap["LegendRange"], range_order = make_rate_range_labels(gmap["AI_N_Rate"], bins=6, decimals=1)
                 gmap = gmap.dropna(subset=["LegendRange"])
-                range_order = [r for r in range_order if str(r).lower() != "nan"]
+                range_order = [r for r in range_order if str(r).lower() != ""]
 
                 map_title = "AI Recommended Nitrogen Rate Map"
                 map_note = "This map shows the AI-recommended nitrogen rate by field area."
