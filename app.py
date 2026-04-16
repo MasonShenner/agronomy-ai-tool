@@ -59,13 +59,6 @@ st.markdown(
     }
     .kpi-label { font-size: 0.9rem; color: #9ca3af; margin-bottom: 0.35rem; }
     .kpi-value { font-size: 1.65rem; font-weight: 700; color: #f9fafb; }
-    .section-card {
-        background: #0f172a;
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 18px;
-        padding: 1rem 1rem 0.75rem 1rem;
-        margin-bottom: 1rem;
-    }
     .summary-box {
         background: linear-gradient(135deg, #13304d 0%, #1d4c73 100%);
         padding: 1.15rem 1.2rem;
@@ -218,7 +211,7 @@ def check_columns(df, required, label):
 # ---------------------------------
 # Upload section
 # ---------------------------------
-st.markdown('<div class="section-card">', unsafe_allow_html=True)
+st.divider()
 st.subheader("Upload Field Data")
 
 upload_col1, upload_col2 = st.columns(2)
@@ -233,7 +226,6 @@ st.markdown(
     '<code>AppliedRate</code>, <code>VRYIELDVOL</code>, <code>DISTANCE</code>, <code>SWATHWIDTH</code>.</div>',
     unsafe_allow_html=True,
 )
-st.markdown('</div>', unsafe_allow_html=True)
 
 # ---------------------------------
 # Main processing
@@ -242,7 +234,7 @@ if n_file is not None and y_file is not None:
     n_df, n_message = read_uploaded_file(n_file)
     y_df, y_message = read_uploaded_file(y_file)
 
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.divider()
     st.subheader("File Processing Status")
     status_col1, status_col2 = st.columns(2)
     with status_col1:
@@ -255,7 +247,6 @@ if n_file is not None and y_file is not None:
         st.stop()
     else:
         st.success("Both files loaded successfully.")
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # Column validation
     n_ok = check_columns(n_df, REQUIRED_N_COLS, "Nitrogen Prescription File")
@@ -268,26 +259,22 @@ if n_file is not None and y_file is not None:
     # ---------------------------------
     preview_col1, preview_col2 = st.columns(2)
     with preview_col1:
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.subheader("Nitrogen Prescription Preview")
         st.dataframe(
             pd.DataFrame(n_df).drop(columns=["geometry"], errors="ignore").head(),
             use_container_width=True,
         )
-        st.markdown('</div>', unsafe_allow_html=True)
     with preview_col2:
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.subheader("Yield Data Preview")
         st.dataframe(
             pd.DataFrame(y_df).drop(columns=["geometry"], errors="ignore").head(),
             use_container_width=True,
         )
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
     # Fertilizer cost input
     # ---------------------------------
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.divider()
     st.subheader("Fertilizer Cost Settings")
     n_cost_per_lb = st.number_input(
         "Nitrogen Fertilizer Cost ($/lb)",
@@ -302,7 +289,6 @@ if n_file is not None and y_file is not None:
         'agronomist and AI-recommended nitrogen rates.</div>',
         unsafe_allow_html=True,
     )
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
     # Agronomy calculations
@@ -545,20 +531,23 @@ if n_file is not None and y_file is not None:
             "NUE = Yield (bu/ac) ÷ N Rate (lb/ac). "
             "Higher values mean nitrogen was used more efficiently by the crop."
         )
+        nue_colors = ["#dc2626", "#f97316", "#eab308", "#84cc16", "#16a34a"]
         fig_nue = go.Figure()
         fig_nue.add_trace(go.Bar(
             x=summary_display["Yield Class"],
             y=summary_display["N Efficiency (NUE)"].round(2),
             name="NUE",
-            marker_color="#38bdf8",
+            marker_color=nue_colors[:len(summary_display)],
             text=summary_display["N Efficiency (NUE)"].round(2),
             textposition="outside",
+            hovertemplate="<b>%{x}</b><br>NUE: %{y:.2f} bu/lb N<extra></extra>",
         ))
         fig_nue.update_layout(
             height=400,
             xaxis_title="Yield Class",
             yaxis_title="NUE (bu/lb N)",
             margin=dict(l=20, r=20, t=20, b=20),
+            showlegend=False,
         )
         st.plotly_chart(fig_nue, use_container_width=True, config={"displayModeBar": False})
 
@@ -575,6 +564,7 @@ if n_file is not None and y_file is not None:
             name="Original Cost ($)",
             text=ai_display["Original Cost ($)"].apply(lambda v: f"${v:,.0f}"),
             textposition="outside",
+            hovertemplate="<b>%{x}</b><br>Original Cost: $%{y:,.0f}<extra></extra>",
         ))
         fig_cost.add_trace(go.Bar(
             x=ai_display["Yield Class"],
@@ -582,6 +572,7 @@ if n_file is not None and y_file is not None:
             name="AI Cost ($)",
             text=ai_display["AI Cost ($)"].apply(lambda v: f"${v:,.0f}"),
             textposition="outside",
+            hovertemplate="<b>%{x}</b><br>AI Cost: $%{y:,.0f}<extra></extra>",
         ))
         fig_cost.update_layout(
             barmode="group",
@@ -598,13 +589,10 @@ if n_file is not None and y_file is not None:
     st.subheader("Comparison: Agronomist vs AI Recommendation")
     table_col1, table_col2 = st.columns(2)
     with table_col1:
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.markdown("### Original Agronomist")
+        st.markdown("#### Original Agronomist")
         st.dataframe(summary_display, use_container_width=True, hide_index=True)
-        st.markdown('</div>', unsafe_allow_html=True)
     with table_col2:
-        st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.markdown("### AI Recommendation")
+        st.markdown("#### AI Recommendation")
         cols_to_show = [
             "Yield Class", "Area (ac)", "Yield (bu/ac)", "N Rate (lb/ac)",
             "N Efficiency (NUE)", "AI N Rate (lb/ac)", "N Change (lb/ac)",
@@ -615,12 +603,11 @@ if n_file is not None and y_file is not None:
             use_container_width=True,
             hide_index=True,
         )
-        st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
     # Download button
     # ---------------------------------
-    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.divider()
     st.subheader("Export AI Recommendations")
     export_cols = [
         "Yield Class", "Area (ac)", "Yield (bu/ac)", "N Rate (lb/ac)",
@@ -640,12 +627,12 @@ if n_file is not None and y_file is not None:
         'for use in your agronomic planning.</div>',
         unsafe_allow_html=True,
     )
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
     # Field map viewer
     # ---------------------------------
     if "geometry" in merged.columns and GEOPANDAS_AVAILABLE:
+        st.divider()
         st.subheader("Field Map Viewer")
         try:
             gmap = gpd.GeoDataFrame(merged.copy(), geometry="geometry")
@@ -660,61 +647,96 @@ if n_file is not None and y_file is not None:
             ai_rate_lookup = dict(zip(ai_table["Yield Class"], ai_table["AI N Rate (lb/ac)"]))
             gmap["AI_N_Rate"] = gmap["YieldClass"].map(ai_rate_lookup)
 
-            gmap["Yield"]       = pd.to_numeric(gmap["Yield"],       errors="coerce")
-            gmap["NitrogenRate"]= pd.to_numeric(gmap["NitrogenRate"],errors="coerce")
-            gmap["AI_N_Rate"]   = pd.to_numeric(gmap["AI_N_Rate"],   errors="coerce")
+            gmap["Yield"]        = pd.to_numeric(gmap["Yield"],        errors="coerce")
+            gmap["NitrogenRate"] = pd.to_numeric(gmap["NitrogenRate"], errors="coerce")
+            gmap["AI_N_Rate"]    = pd.to_numeric(gmap["AI_N_Rate"],    errors="coerce")
 
-            gmap["DisplayYield"]    = gmap["Yield"].round(1)
-            gmap["DisplayOriginalN"]= gmap["NitrogenRate"].round(1)
-            gmap["DisplayAIN"]      = gmap["AI_N_Rate"].round(1)
-            gmap["DisplayClass"]    = gmap["YieldClass"].astype(str)
+            gmap["DisplayYield"]     = gmap["Yield"].round(1)
+            gmap["DisplayOriginalN"] = gmap["NitrogenRate"].round(1)
+            gmap["DisplayAIN"]       = gmap["AI_N_Rate"].round(1)
+            gmap["DisplayClass"]     = gmap["YieldClass"].astype(str)
 
-            st.markdown('<div class="section-card">', unsafe_allow_html=True)
-            st.markdown("### Field Map")
             map_choice = st.selectbox(
                 "Map Selection",
                 ["Original Nitrogen Applied", "AI Recommended Nitrogen Rate"],
             )
 
+            # Yield-class colour palette (red → green = very low → very high)
+            YIELD_CLASS_ORDER   = ["Very Low", "Low", "Medium", "High", "Very High"]
+            YIELD_CLASS_PALETTE = {
+                "Very Low":  "#dc2626",
+                "Low":       "#f97316",
+                "Medium":    "#eab308",
+                "High":      "#84cc16",
+                "Very High": "#16a34a",
+            }
+
             if map_choice == "Original Nitrogen Applied":
-                gmap["LegendRange"], range_order = make_rate_range_labels(gmap["NitrogenRate"], bins=6, decimals=1)
-                map_title        = "Original Nitrogen Applied Map"
-                map_note         = "This map shows the nitrogen rate that was originally applied across the field."
+                # Original map: colour by binned N rate (red = low, green = high)
+                gmap["LegendRange"], range_order = make_rate_range_labels(
+                    gmap["NitrogenRate"], bins=6, decimals=1
+                )
+                gmap    = gmap.dropna(subset=["LegendRange"])
+                range_order = [r for r in range_order if r and str(r).lower() not in ("nan", "")]
+                map_note         = "Each dot shows the nitrogen rate originally applied at that location. Red = lower rates, green = higher rates."
                 hover_rate_label = "N Applied"
                 custom_cols      = ["DisplayOriginalN", "DisplayYield", "DisplayClass"]
-            else:
-                gmap["LegendRange"], range_order = make_rate_range_labels(gmap["AI_N_Rate"], bins=6, decimals=1)
-                map_title        = "AI Recommended Nitrogen Rate Map"
-                map_note         = "This map shows the AI-recommended nitrogen rate by field area."
-                hover_rate_label = "AI Rate"
-                custom_cols      = ["DisplayAIN", "DisplayYield", "DisplayClass"]
 
-            gmap = gmap.dropna(subset=["LegendRange"])
-            range_order = [r for r in range_order if r and str(r).lower() not in ("nan", "")]
+                if len(range_order) == 0:
+                    st.warning("Map legend ranges could not be created from the available data.")
+                else:
+                    palette   = ["#dc2626", "#f97316", "#eab308", "#84cc16", "#4fd000", "#16a34a"]
+                    color_map = {label: palette[min(i, len(palette) - 1)] for i, label in enumerate(range_order)}
+                    st.markdown(map_note)
+                    fig_map = px.scatter_map(
+                        gmap, lat="lat", lon="lon",
+                        color="LegendRange",
+                        category_orders={"LegendRange": range_order},
+                        color_discrete_map=color_map,
+                        zoom=12, height=650,
+                        custom_data=custom_cols,
+                    )
+                    fig_map.update_traces(
+                        marker=dict(size=6, opacity=0.88),
+                        hovertemplate=(
+                            f"<b>{hover_rate_label}:</b> %{{customdata[0]}} lb/ac<br>"
+                            "<b>Yield:</b> %{customdata[1]} bu/ac<br>"
+                            "<b>Class:</b> %{customdata[2]}"
+                            "<extra></extra>"
+                        ),
+                    )
+                    fig_map.update_layout(
+                        margin=dict(l=0, r=0, t=0, b=0),
+                        legend_title_text="N Rate",
+                        legend=dict(orientation="v", yanchor="top", y=0.98, xanchor="left", x=1.01),
+                    )
+                    st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
-            if len(range_order) == 0:
-                st.warning("Map legend ranges could not be created from the available data.")
             else:
-                st.markdown(f"### {map_title}")
+                # AI map: colour by yield class (NUE performance)
+                # Red = very low NUE → most nitrogen cut; Green = very high NUE → N maintained/increased
+                gmap["YieldClassStr"] = gmap["YieldClass"].astype(str)
+                gmap = gmap.dropna(subset=["YieldClassStr", "AI_N_Rate"])
+                map_note = (
+                    "Each dot is coloured by its yield class. "
+                    "**Red = Very Low NUE** zones where nitrogen was reduced the most (−10%). "
+                    "**Green = Very High NUE** zones where nitrogen was maintained or slightly increased (+5%)."
+                )
+                custom_cols = ["DisplayAIN", "DisplayYield", "DisplayClass"]
+
                 st.markdown(map_note)
-                palette   = ["#ff0000", "#ff7a00", "#ffd400", "#b7e000", "#4fd000", "#00a83a"]
-                color_map = {label: palette[min(i, len(palette) - 1)] for i, label in enumerate(range_order)}
-
                 fig_map = px.scatter_map(
-                    gmap,
-                    lat="lat",
-                    lon="lon",
-                    color="LegendRange",
-                    category_orders={"LegendRange": range_order},
-                    color_discrete_map=color_map,
-                    zoom=12,
-                    height=650,
+                    gmap, lat="lat", lon="lon",
+                    color="YieldClassStr",
+                    category_orders={"YieldClassStr": YIELD_CLASS_ORDER},
+                    color_discrete_map=YIELD_CLASS_PALETTE,
+                    zoom=12, height=650,
                     custom_data=custom_cols,
                 )
                 fig_map.update_traces(
                     marker=dict(size=6, opacity=0.88),
                     hovertemplate=(
-                        f"<b>{hover_rate_label}:</b> %{{customdata[0]}} lb/ac<br>"
+                        "<b>AI Rate:</b> %{customdata[0]} lb/ac<br>"
                         "<b>Yield:</b> %{customdata[1]} bu/ac<br>"
                         "<b>Class:</b> %{customdata[2]}"
                         "<extra></extra>"
@@ -722,11 +744,10 @@ if n_file is not None and y_file is not None:
                 )
                 fig_map.update_layout(
                     margin=dict(l=0, r=0, t=0, b=0),
-                    legend_title_text="Nitrogen Rate",
+                    legend_title_text="Yield Class (NUE)",
                     legend=dict(orientation="v", yanchor="top", y=0.98, xanchor="left", x=1.01),
                 )
                 st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
-            st.markdown('</div>', unsafe_allow_html=True)
         except Exception as e:
             st.warning(f"Field map could not be generated: {e}")
