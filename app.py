@@ -444,13 +444,13 @@ if n_file is not None and y_file is not None:
         st.subheader("Nitrogen Prescription Preview")
         st.dataframe(
             pd.DataFrame(n_df).drop(columns=["geometry"], errors="ignore").head(),
-            use_container_width=True,
+            width="stretch",
         )
     with preview_col2:
         st.subheader("Yield Data Preview")
         st.dataframe(
             pd.DataFrame(y_df).drop(columns=["geometry"], errors="ignore").head(),
-            use_container_width=True,
+            width="stretch",
         )
 
     # ---------------------------------
@@ -718,7 +718,7 @@ if n_file is not None and y_file is not None:
             yaxis_title="Nitrogen Rate (lb/ac)",
             margin=dict(l=20, r=20, t=20, b=20),
         )
-        st.plotly_chart(fig_n, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_n, width="stretch", config={"displayModeBar": False})
 
     # NUE chart
     with st.expander("View Nitrogen Use Efficiency (NUE) by Yield Class", expanded=False):
@@ -745,7 +745,7 @@ if n_file is not None and y_file is not None:
             margin=dict(l=20, r=20, t=20, b=20),
             showlegend=False,
         )
-        st.plotly_chart(fig_nue, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_nue, width="stretch", config={"displayModeBar": False})
 
     # Cost chart
     with st.expander("View Estimated Fertilizer Cost by Yield Class", expanded=False):
@@ -778,7 +778,7 @@ if n_file is not None and y_file is not None:
             yaxis_title="Estimated Cost ($)",
             margin=dict(l=20, r=20, t=20, b=20),
         )
-        st.plotly_chart(fig_cost, use_container_width=True, config={"displayModeBar": False})
+        st.plotly_chart(fig_cost, width="stretch", config={"displayModeBar": False})
 
     # ---------------------------------
     # Side-by-side comparison tables
@@ -788,7 +788,7 @@ if n_file is not None and y_file is not None:
     table_col1, table_col2 = st.columns(2)
     with table_col1:
         st.markdown("#### Original Agronomist")
-        st.dataframe(summary_display, use_container_width=True, hide_index=True)
+        st.dataframe(summary_display, width="stretch", hide_index=True)
     with table_col2:
         st.markdown("#### AI Recommendation")
         cols_to_show = [
@@ -805,7 +805,7 @@ if n_file is not None and y_file is not None:
         ]
         st.dataframe(
             ai_display[[c for c in cols_to_show if c in ai_display.columns]],
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
 
@@ -921,7 +921,7 @@ if n_file is not None and y_file is not None:
                         legend_title_text="N Rate",
                         legend=dict(orientation="v", yanchor="top", y=0.98, xanchor="left", x=1.01),
                     )
-                    st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
+                    st.plotly_chart(fig_map, width="stretch", config={"displayModeBar": False})
 
             else:
                 gmap["YieldClassStr"] = gmap["YieldClass"].astype(str)
@@ -954,7 +954,7 @@ if n_file is not None and y_file is not None:
                     legend_title_text="Yield Class (NUE)",
                     legend=dict(orientation="v", yanchor="top", y=0.98, xanchor="left", x=1.01),
                 )
-                st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig_map, width="stretch", config={"displayModeBar": False})
 
         except Exception as e:
             st.warning(f"Field map could not be generated: {e}")
@@ -987,7 +987,7 @@ if n_file is not None and y_file is not None:
             ]
             cols = st.columns(2)
             for i, q in enumerate(starters):
-                if cols[i % 2].button(q, key=f"starter_{i}", use_container_width=True):
+                if cols[i % 2].button(q, key=f"starter_{i}", width="stretch"):
                     st.session_state.chat_history.append({"role": "user", "content": q})
                     st.rerun()
 
