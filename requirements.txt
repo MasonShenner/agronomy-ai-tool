@@ -1,6 +1,7 @@
 streamlit
 pandas
 geopandas
-pyogrio
+pygrio
 openpyxl
 plotly
+anthropic
