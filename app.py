@@ -14,7 +14,6 @@ try:
 except ImportError:
     GEOPANDAS_AVAILABLE = False
 
-
 # ---------------------------------
 # Page setup
 # ---------------------------------
@@ -30,15 +29,8 @@ st.set_page_config(
 st.markdown(
     """
     <style>
-    .main {
-        padding-top: 1.2rem;
-    }
-
-    .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 2rem;
-    }
-
+    .main { padding-top: 1.2rem; }
+    .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
     .hero-box {
         background: linear-gradient(135deg, #10233d 0%, #16385c 100%);
         padding: 1.4rem 1.6rem;
@@ -46,20 +38,8 @@ st.markdown(
         border: 1px solid rgba(255,255,255,0.08);
         margin-bottom: 1rem;
     }
-
-    .hero-title {
-        font-size: 2rem;
-        font-weight: 700;
-        color: white;
-        margin-bottom: 0.4rem;
-    }
-
-    .hero-subtitle {
-        font-size: 1rem;
-        color: #d7e7f7;
-        margin-bottom: 0.2rem;
-    }
-
+    .hero-title { font-size: 2rem; font-weight: 700; color: white; margin-bottom: 0.4rem; }
+    .hero-subtitle { font-size: 1rem; color: #d7e7f7; margin-bottom: 0.2rem; }
     .crop-tag {
         display: inline-block;
         background: rgba(255,255,255,0.12);
@@ -70,7 +50,6 @@ st.markdown(
         font-weight: 600;
         margin-top: 0.5rem;
     }
-
     .kpi-card {
         background: #111827;
         border: 1px solid rgba(255,255,255,0.08);
@@ -78,19 +57,8 @@ st.markdown(
         padding: 1rem 1rem 0.85rem 1rem;
         margin-bottom: 0.75rem;
     }
-
-    .kpi-label {
-        font-size: 0.9rem;
-        color: #9ca3af;
-        margin-bottom: 0.35rem;
-    }
-
-    .kpi-value {
-        font-size: 1.65rem;
-        font-weight: 700;
-        color: #f9fafb;
-    }
-
+    .kpi-label { font-size: 0.9rem; color: #9ca3af; margin-bottom: 0.35rem; }
+    .kpi-value { font-size: 1.65rem; font-weight: 700; color: #f9fafb; }
     .section-card {
         background: #0f172a;
         border: 1px solid rgba(255,255,255,0.08);
@@ -98,7 +66,6 @@ st.markdown(
         padding: 1rem 1rem 0.75rem 1rem;
         margin-bottom: 1rem;
     }
-
     .summary-box {
         background: linear-gradient(135deg, #13304d 0%, #1d4c73 100%);
         padding: 1.15rem 1.2rem;
@@ -107,22 +74,18 @@ st.markdown(
         color: white;
         margin-bottom: 1rem;
     }
-
-    .summary-title {
-        font-size: 1.25rem;
-        font-weight: 700;
-        margin-bottom: 0.6rem;
+    .summary-title { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.6rem; }
+    .small-note { color: #9ca3af; font-size: 0.88rem; margin-top: 0.2rem; }
+    .logic-box {
+        background: #1e293b;
+        border: 1px solid rgba(255,255,255,0.10);
+        border-radius: 14px;
+        padding: 0.9rem 1.1rem;
+        color: #e2e8f0;
+        font-size: 0.93rem;
+        margin-bottom: 0.75rem;
     }
-
-    .small-note {
-        color: #9ca3af;
-        font-size: 0.88rem;
-        margin-top: 0.2rem;
-    }
-
-    div[data-baseweb="select"] > div {
-        border-radius: 12px !important;
-    }
+    div[data-baseweb="select"] > div { border-radius: 12px !important; }
     </style>
     """,
     unsafe_allow_html=True
@@ -134,13 +97,12 @@ st.markdown(
 st.markdown(
     """
     <div class="hero-box">
-        <div class="hero-title">AI Nitrogen Management Decision Support Tool - Mason Shenner, Capstone Project 2026</div>
+        <div class="hero-title">AI Nitrogen Management Decision Support Tool — Mason Shenner, Capstone 2026</div>
         <div class="hero-subtitle">
             Upload nitrogen prescription and yield data to compare original agronomist decisions
             with AI-assisted nitrogen recommendations.
         </div>
-        <div class="crop-tag">Crop Type: CWRS 
-        Variety: AAC Wheatland VB</div>
+        <div class="crop-tag">Crop Type: CWRS &nbsp;|&nbsp; Variety: AAC Wheatland VB</div>
     </div>
     """,
     unsafe_allow_html=True
@@ -157,65 +119,43 @@ def clean_columns(df):
 def read_uploaded_file(uploaded_file):
     if uploaded_file is None:
         return None, "No file uploaded."
-
     file_name = uploaded_file.name.lower()
-
     if file_name.endswith(".csv"):
         df = pd.read_csv(uploaded_file)
-        df = clean_columns(df)
-        return df, "CSV file loaded successfully."
-
+        return clean_columns(df), "CSV file loaded successfully."
     if file_name.endswith(".xlsx") or file_name.endswith(".xls"):
         df = pd.read_excel(uploaded_file)
-        df = clean_columns(df)
-        return df, "Excel file loaded successfully."
-
+        return clean_columns(df), "Excel file loaded successfully."
     if file_name.endswith(".zip"):
         with tempfile.TemporaryDirectory() as tmpdir:
             zip_path = os.path.join(tmpdir, uploaded_file.name)
-
             with open(zip_path, "wb") as f:
                 f.write(uploaded_file.getbuffer())
-
             with zipfile.ZipFile(zip_path, "r") as zip_ref:
                 zip_ref.extractall(tmpdir)
                 extracted_files = zip_ref.namelist()
-
             for inner_file in extracted_files:
                 if inner_file.lower().endswith(".csv"):
-                    csv_path = os.path.join(tmpdir, inner_file)
-                    df = pd.read_csv(csv_path)
-                    df = clean_columns(df)
-                    return df, f"ZIP file loaded. Found CSV: {inner_file}"
-
+                    df = pd.read_csv(os.path.join(tmpdir, inner_file))
+                    return clean_columns(df), f"ZIP → CSV: {inner_file}"
             for inner_file in extracted_files:
-                if inner_file.lower().endswith(".xlsx") or inner_file.lower().endswith(".xls"):
-                    excel_path = os.path.join(tmpdir, inner_file)
-                    df = pd.read_excel(excel_path)
-                    df = clean_columns(df)
-                    return df, f"ZIP file loaded. Found Excel file: {inner_file}"
-
+                if inner_file.lower().endswith((".xlsx", ".xls")):
+                    df = pd.read_excel(os.path.join(tmpdir, inner_file))
+                    return clean_columns(df), f"ZIP → Excel: {inner_file}"
             shp_files = [f for f in extracted_files if f.lower().endswith(".shp")]
-
             if shp_files:
                 if not GEOPANDAS_AVAILABLE:
-                    return None, "ZIP contains a shapefile, but geopandas is not installed."
-
+                    return None, "ZIP contains a shapefile but geopandas is not installed."
                 shp_path = os.path.join(tmpdir, shp_files[0])
-
                 try:
                     try:
                         gdf = gpd.read_file(shp_path, engine="pyogrio")
                     except Exception:
                         gdf = gpd.read_file(shp_path)
-
-                    gdf = clean_columns(gdf)
-                    return gdf, f"ZIP file loaded. Found shapefile: {shp_files[0]}"
+                    return clean_columns(gdf), f"ZIP → Shapefile: {shp_files[0]}"
                 except Exception as e:
-                    return None, f"Found shapefile but could not read it: {e}"
-
-            return None, "ZIP file was read, but no CSV, Excel, or shapefile was found."
-
+                    return None, f"Shapefile found but could not be read: {e}"
+            return None, "ZIP was read but no CSV, Excel, or shapefile was found inside."
     return None, "Unsupported file type."
 
 
@@ -227,7 +167,7 @@ def add_kpi(label, value, color="#f9fafb"):
             <div class="kpi-value" style="color:{color};">{value}</div>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
 
@@ -242,42 +182,37 @@ def safe_qcut(series, q, labels):
 def make_rate_range_labels(series, bins=6, decimals=1):
     s = pd.to_numeric(series, errors="coerce")
     valid = s.dropna()
-
     if valid.empty:
         return pd.Series(["Unknown"] * len(series), index=series.index), ["Unknown"]
-
-    min_val = float(valid.min())
-    max_val = float(valid.max())
-
+    min_val, max_val = float(valid.min()), float(valid.max())
     if min_val == max_val:
         label = f"{round(min_val, decimals)} lb/ac"
         return pd.Series([label] * len(series), index=series.index), [label]
-
-    edges = []
-    step = (max_val - min_val) / bins
-
-    for i in range(bins + 1):
-        edges.append(round(min_val + step * i, decimals))
-
+    edges = [round(min_val + (max_val - min_val) / bins * i, decimals) for i in range(bins + 1)]
     for i in range(1, len(edges)):
         if edges[i] <= edges[i - 1]:
-            edges[i] = round(edges[i - 1] + (10 ** -decimals), decimals)
-
-    labels = []
-    for i in range(len(edges) - 1):
-        low = edges[i]
-        high = edges[i + 1]
-        labels.append(f"{low:.{decimals}f}–{high:.{decimals}f} lb/ac")
-
-    categorized = pd.cut(
-        s,
-        bins=edges,
-        labels=labels,
-        include_lowest=True,
-        duplicates="drop"
-    )
-
+            edges[i] = round(edges[i - 1] + 10 ** -decimals, decimals)
+    labels = [f"{edges[i]:.{decimals}f}–{edges[i+1]:.{decimals}f} lb/ac" for i in range(len(edges) - 1)]
+    categorized = pd.cut(s, bins=edges, labels=labels, include_lowest=True, duplicates="drop")
     return categorized.astype(str), labels
+
+
+# ---------------------------------
+# Required column check
+# ---------------------------------
+REQUIRED_N_COLS  = ["AppliedRate", "DISTANCE", "SWATHWIDTH"]
+REQUIRED_Y_COLS  = ["VRYIELDVOL", "DISTANCE", "SWATHWIDTH"]
+
+def check_columns(df, required, label):
+    missing = [c for c in required if c not in df.columns]
+    if missing:
+        st.error(
+            f"**{label}** is missing required columns: `{'`, `'.join(missing)}`\n\n"
+            f"This tool expects **John Deere Operations Center** exports. "
+            f"Available columns in your file: `{'`, `'.join(df.columns.tolist())}`"
+        )
+        return False
+    return True
 
 
 # ---------------------------------
@@ -287,22 +222,16 @@ st.markdown('<div class="section-card">', unsafe_allow_html=True)
 st.subheader("Upload Field Data")
 
 upload_col1, upload_col2 = st.columns(2)
-
 with upload_col1:
-    n_file = st.file_uploader(
-        "Upload Nitrogen Prescription File",
-        type=["csv", "xlsx", "xls", "zip"]
-    )
-
+    n_file = st.file_uploader("Upload Nitrogen Prescription File", type=["csv", "xlsx", "xls", "zip"])
 with upload_col2:
-    y_file = st.file_uploader(
-        "Upload Yield Data File",
-        type=["csv", "xlsx", "xls", "zip"]
-    )
+    y_file = st.file_uploader("Upload Yield Data File", type=["csv", "xlsx", "xls", "zip"])
 
 st.markdown(
-    '<div class="small-note">Accepted file types: CSV, Excel, and ZIP exports including shapefiles.</div>',
-    unsafe_allow_html=True
+    '<div class="small-note">Accepted formats: CSV, Excel, and ZIP exports (including shapefiles) '
+    'from John Deere Operations Center. Required columns: '
+    '<code>AppliedRate</code>, <code>VRYIELDVOL</code>, <code>DISTANCE</code>, <code>SWATHWIDTH</code>.</div>',
+    unsafe_allow_html=True,
 )
 st.markdown('</div>', unsafe_allow_html=True)
 
@@ -315,7 +244,6 @@ if n_file is not None and y_file is not None:
 
     st.markdown('<div class="section-card">', unsafe_allow_html=True)
     st.subheader("File Processing Status")
-
     status_col1, status_col2 = st.columns(2)
     with status_col1:
         st.write(f"**Nitrogen file:** {n_message}")
@@ -323,62 +251,77 @@ if n_file is not None and y_file is not None:
         st.write(f"**Yield file:** {y_message}")
 
     if n_df is None or y_df is None:
-        st.error("One or both files could not be read.")
+        st.error("One or both files could not be read. See messages above.")
         st.stop()
     else:
-        st.success("Both files were loaded successfully.")
+        st.success("Both files loaded successfully.")
     st.markdown('</div>', unsafe_allow_html=True)
+
+    # Column validation
+    n_ok = check_columns(n_df, REQUIRED_N_COLS, "Nitrogen Prescription File")
+    y_ok = check_columns(y_df, REQUIRED_Y_COLS, "Yield Data File")
+    if not n_ok or not y_ok:
+        st.stop()
 
     # ---------------------------------
     # Preview data
     # ---------------------------------
     preview_col1, preview_col2 = st.columns(2)
-
     with preview_col1:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
-        st.subheader("Nitrogen Prescription Data Preview")
-        preview_n = pd.DataFrame(n_df).drop(columns=["geometry"], errors="ignore")
-        st.dataframe(preview_n.head(), width="stretch")
+        st.subheader("Nitrogen Prescription Preview")
+        st.dataframe(
+            pd.DataFrame(n_df).drop(columns=["geometry"], errors="ignore").head(),
+            use_container_width=True,
+        )
         st.markdown('</div>', unsafe_allow_html=True)
-
     with preview_col2:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.subheader("Yield Data Preview")
-        preview_y = pd.DataFrame(y_df).drop(columns=["geometry"], errors="ignore")
-        st.dataframe(preview_y.head(), width="stretch")
+        st.dataframe(
+            pd.DataFrame(y_df).drop(columns=["geometry"], errors="ignore").head(),
+            use_container_width=True,
+        )
         st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------------------------------
+    # Fertilizer cost input
+    # ---------------------------------
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.subheader("Fertilizer Cost Settings")
+    n_cost_per_lb = st.number_input(
+        "Nitrogen Fertilizer Cost ($/lb)",
+        min_value=0.01,
+        max_value=5.00,
+        value=0.50,
+        step=0.01,
+        help="Enter the cost per pound of nitrogen fertilizer. Default $0.50/lb is a typical urea equivalent.",
+    )
+    st.markdown(
+        '<div class="small-note">Used to calculate estimated fertilizer cost savings between '
+        'agronomist and AI-recommended nitrogen rates.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
     # Agronomy calculations
     # ---------------------------------
     n = n_df.copy()
     y = y_df.copy()
-
     sqft_to_acres = 1 / 43560
 
-    if "DISTANCE" in n.columns and "SWATHWIDTH" in n.columns:
-        n["Area_ac"] = n["DISTANCE"] * n["SWATHWIDTH"] * sqft_to_acres
-
-    if "DISTANCE" in y.columns and "SWATHWIDTH" in y.columns:
-        y["Area_ac"] = y["DISTANCE"] * y["SWATHWIDTH"] * sqft_to_acres
-
-    if "VRYIELDVOL" in y.columns:
-        y["Yield"] = y["VRYIELDVOL"]
+    n["Area_ac"] = n["DISTANCE"] * n["SWATHWIDTH"] * sqft_to_acres
+    y["Area_ac"] = y["DISTANCE"] * y["SWATHWIDTH"] * sqft_to_acres
+    y["Yield"]   = y["VRYIELDVOL"]
 
     min_len = min(len(n), len(y))
     merged = pd.DataFrame()
+    merged["Area_ac"]      = y["Area_ac"].iloc[:min_len].values
+    merged["Yield"]        = y["Yield"].iloc[:min_len].values
+    merged["NitrogenRate"] = n["AppliedRate"].iloc[:min_len].values
 
-    if "Area_ac" in y.columns:
-        merged["Area_ac"] = y["Area_ac"].iloc[:min_len].values
-
-    if "Yield" in y.columns:
-        merged["Yield"] = y["Yield"].iloc[:min_len].values
-
-    if "AppliedRate" in n.columns:
-        merged["NitrogenRate"] = n["AppliedRate"].iloc[:min_len].values
-
-    if "Yield" in merged.columns and "NitrogenRate" in merged.columns:
-        merged["N_Efficiency"] = merged["Yield"] / merged["NitrogenRate"]
+    merged["N_Efficiency"] = merged["Yield"] / merged["NitrogenRate"]
 
     if "geometry" in y.columns:
         merged["geometry"] = y["geometry"].iloc[:min_len].values
@@ -389,28 +332,30 @@ if n_file is not None and y_file is not None:
     merged = merged.dropna(subset=["Area_ac", "Yield", "NitrogenRate", "N_Efficiency"])
 
     if merged.empty:
-        st.error("The uploaded files were read, but the processed dataset is empty after cleaning.")
+        st.error(
+            "The data processed to an empty dataset after cleaning. "
+            "Check that your nitrogen and yield files are from the same growing season."
+        )
         st.stop()
 
     merged["YieldClass"] = safe_qcut(
-        merged["Yield"],
-        5,
-        ["Very Low", "Low", "Medium", "High", "Very High"]
+        merged["Yield"], 5,
+        ["Very Low", "Low", "Medium", "High", "Very High"],
     )
 
-    summary = merged.groupby("YieldClass", observed=False).agg({
-        "Area_ac": "sum",
-        "Yield": "mean",
-        "NitrogenRate": "mean",
-        "N_Efficiency": "mean"
-    }).reset_index()
+    summary = merged.groupby("YieldClass", observed=False).agg(
+        Area_ac=("Area_ac", "sum"),
+        Yield=("Yield", "mean"),
+        NitrogenRate=("NitrogenRate", "mean"),
+        N_Efficiency=("N_Efficiency", "mean"),
+    ).reset_index()
 
     summary = summary.rename(columns={
-        "YieldClass": "Yield Class",
-        "Area_ac": "Area (ac)",
-        "Yield": "Yield (bu/ac)",
-        "NitrogenRate": "N Rate (lb/ac)",
-        "N_Efficiency": "N Efficiency"
+        "YieldClass":    "Yield Class",
+        "Area_ac":       "Area (ac)",
+        "Yield":         "Yield (bu/ac)",
+        "NitrogenRate":  "N Rate (lb/ac)",
+        "N_Efficiency":  "N Efficiency (NUE)",
     })
 
     # ---------------------------------
@@ -419,60 +364,123 @@ if n_file is not None and y_file is not None:
     ai_table = summary.copy()
 
     def adjust_n_rate(row):
-        efficiency = row["N Efficiency"]
-        current_n = row["N Rate (lb/ac)"]
-
-        if efficiency < 0.4:
-            return current_n * 0.90
-        elif efficiency < 0.6:
-            return current_n * 0.95
-        elif efficiency < 0.75:
-            return current_n
+        """
+        Rule-based NUE decision model:
+          NUE < 0.40  →  reduce N by 10%  (poor response, likely over-applied)
+          NUE < 0.60  →  reduce N by  5%  (below-average response)
+          NUE < 0.75  →  keep N the same  (adequate response)
+          NUE ≥ 0.75  →  increase N by 5% (strong response, crop can use more)
+        """
+        nue = row["N Efficiency (NUE)"]
+        n   = row["N Rate (lb/ac)"]
+        if nue < 0.40:
+            return n * 0.90
+        elif nue < 0.60:
+            return n * 0.95
+        elif nue < 0.75:
+            return n
         else:
-            return current_n * 1.05
+            return n * 1.05
 
     ai_table["AI N Rate (lb/ac)"] = ai_table.apply(adjust_n_rate, axis=1)
-    ai_table["N Change (lb/ac)"] = ai_table["AI N Rate (lb/ac)"] - ai_table["N Rate (lb/ac)"]
+    ai_table["N Change (lb/ac)"]  = ai_table["AI N Rate (lb/ac)"] - ai_table["N Rate (lb/ac)"]
+
+    # Cost calculations
+    ai_table["Original Cost ($)"] = (
+        ai_table["N Rate (lb/ac)"] * ai_table["Area (ac)"] * n_cost_per_lb
+    )
+    ai_table["AI Cost ($)"] = (
+        ai_table["AI N Rate (lb/ac)"] * ai_table["Area (ac)"] * n_cost_per_lb
+    )
+    ai_table["Cost Savings ($)"] = ai_table["Original Cost ($)"] - ai_table["AI Cost ($)"]
 
     # ---------------------------------
-    # Rounded display
+    # Rounded display tables
     # ---------------------------------
     summary_display = summary.copy()
     ai_display = ai_table.copy()
 
-    for col in ["Area (ac)", "Yield (bu/ac)", "N Rate (lb/ac)", "N Efficiency"]:
+    for col in ["Area (ac)", "Yield (bu/ac)", "N Rate (lb/ac)", "N Efficiency (NUE)"]:
         summary_display[col] = summary_display[col].round(2)
 
     for col in [
-        "Area (ac)", "Yield (bu/ac)", "N Rate (lb/ac)",
-        "N Efficiency", "AI N Rate (lb/ac)", "N Change (lb/ac)"
+        "Area (ac)", "Yield (bu/ac)", "N Rate (lb/ac)", "N Efficiency (NUE)",
+        "AI N Rate (lb/ac)", "N Change (lb/ac)",
+        "Original Cost ($)", "AI Cost ($)", "Cost Savings ($)",
     ]:
-        ai_display[col] = ai_display[col].round(2)
+        if col in ai_display.columns:
+            ai_display[col] = ai_display[col].round(2)
 
     # ---------------------------------
-    # KPI cards
+    # KPI values
     # ---------------------------------
-    total_area = summary["Area (ac)"].sum()
-    avg_original_n = ai_table["N Rate (lb/ac)"].mean()
-    avg_ai_n = ai_table["AI N Rate (lb/ac)"].mean()
-    avg_n_change = ai_table["N Change (lb/ac)"].mean()
+    total_area       = summary["Area (ac)"].sum()
+    avg_original_n   = ai_table["N Rate (lb/ac)"].mean()
+    avg_ai_n         = ai_table["AI N Rate (lb/ac)"].mean()
+    avg_n_change     = ai_table["N Change (lb/ac)"].mean()
+    avg_nue          = ai_table["N Efficiency (NUE)"].mean()
+    total_savings    = ai_table["Cost Savings ($)"].sum()
+    total_orig_cost  = ai_table["Original Cost ($)"].sum()
+    total_ai_cost    = ai_table["AI Cost ($)"].sum()
 
-    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    # ---------------------------------
+    # KPI cards — 3 rows of 3
+    # ---------------------------------
+    kpi1, kpi2, kpi3 = st.columns(3)
     with kpi1:
         add_kpi("Estimated Field Area", f"{total_area:.1f} ac")
     with kpi2:
         add_kpi("Average Original N Rate", f"{avg_original_n:.1f} lb/ac")
     with kpi3:
         add_kpi("Average AI N Rate", f"{avg_ai_n:.1f} lb/ac")
+
+    kpi4, kpi5, kpi6 = st.columns(3)
     with kpi4:
         change_color = "#22c55e" if avg_n_change >= 0 else "#f97316"
-        add_kpi("Average N Change", f"{avg_n_change:.1f} lb/ac", color=change_color)
+        add_kpi("Average N Rate Change", f"{avg_n_change:+.1f} lb/ac", color=change_color)
+    with kpi5:
+        add_kpi("Average NUE (Field)", f"{avg_nue:.2f} bu/lb N")
+    with kpi6:
+        savings_color = "#22c55e" if total_savings >= 0 else "#f97316"
+        add_kpi("Estimated Cost Savings", f"${total_savings:,.0f}", color=savings_color)
+
+    # ---------------------------------
+    # AI logic explainer
+    # ---------------------------------
+    with st.expander("How does the AI recommendation work?", expanded=False):
+        st.markdown(
+            """
+            <div class="logic-box">
+            <b>Decision Model — Nitrogen Use Efficiency (NUE) Thresholds</b><br><br>
+            The tool calculates NUE for each yield class using:<br>
+            <code>NUE = Yield (bu/ac) ÷ Nitrogen Rate (lb/ac)</code><br><br>
+            It then adjusts the nitrogen rate for each zone based on how efficiently nitrogen was used:
+            <br><br>
+            <table style="width:100%; border-collapse:collapse; font-size:0.92rem;">
+              <tr style="border-bottom:1px solid rgba(255,255,255,0.1);">
+                <th style="text-align:left; padding:4px 8px;">NUE Range</th>
+                <th style="text-align:left; padding:4px 8px;">Interpretation</th>
+                <th style="text-align:left; padding:4px 8px;">Adjustment</th>
+              </tr>
+              <tr><td style="padding:4px 8px;">NUE &lt; 0.40</td><td style="padding:4px 8px;">Poor response — likely over-applied</td><td style="padding:4px 8px; color:#f97316;">−10%</td></tr>
+              <tr><td style="padding:4px 8px;">0.40 – 0.60</td><td style="padding:4px 8px;">Below average response</td><td style="padding:4px 8px; color:#fbbf24;">−5%</td></tr>
+              <tr><td style="padding:4px 8px;">0.60 – 0.75</td><td style="padding:4px 8px;">Adequate response</td><td style="padding:4px 8px; color:#9ca3af;">No change</td></tr>
+              <tr><td style="padding:4px 8px;">NUE ≥ 0.75</td><td style="padding:4px 8px;">Strong response — crop can use more</td><td style="padding:4px 8px; color:#22c55e;">+5%</td></tr>
+            </table>
+            <br>
+            This is a rule-based decision model derived from agronomic NUE research.
+            It uses the same data inputs an agronomist has access to, and is intended as a
+            comparison tool — not a replacement for professional judgment.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     # ---------------------------------
     # Summary box
     # ---------------------------------
-    lowest_eff_class = ai_table.loc[ai_table["N Efficiency"].idxmin(), "Yield Class"]
-    highest_eff_class = ai_table.loc[ai_table["N Efficiency"].idxmax(), "Yield Class"]
+    lowest_eff_class  = ai_table.loc[ai_table["N Efficiency (NUE)"].idxmin(), "Yield Class"]
+    highest_eff_class = ai_table.loc[ai_table["N Efficiency (NUE)"].idxmax(), "Yield Class"]
 
     st.markdown(
         f"""
@@ -480,22 +488,26 @@ if n_file is not None and y_file is not None:
             <div class="summary-title">AI Recommendation Summary</div>
             <div>
                 The field was divided into yield zones to compare how nitrogen performed across different areas.
-                Lower-yield areas showed weaker efficiency, which means nitrogen was not being used as effectively.
-                Higher-yield areas showed stronger efficiency and a better response to nitrogen.
+                Lower-yield areas showed weaker nitrogen use efficiency, while higher-yield areas showed a
+                stronger response to the nitrogen applied.
                 <br><br>
-                Based on this pattern, the model recommends slightly reducing nitrogen in lower-performing areas
-                and maintaining or slightly increasing it in stronger-performing zones.
+                Based on these patterns, the model recommends reducing nitrogen in lower-performing zones
+                and maintaining or slightly increasing rates in stronger-performing zones.
                 <br><br>
-                The weakest nitrogen performance was found in the <b>{lowest_eff_class}</b> zone, while the strongest
-                performance was found in the <b>{highest_eff_class}</b> zone.
+                The weakest nitrogen performance was in the <b>{lowest_eff_class}</b> zone (NUE: {ai_table["N Efficiency (NUE)"].min():.2f} bu/lb N),
+                and the strongest was in the <b>{highest_eff_class}</b> zone (NUE: {ai_table["N Efficiency (NUE)"].max():.2f} bu/lb N).
                 <br><br>
-                On average, the original nitrogen rate was <b>{avg_original_n:.1f} lb/ac</b>, and the AI-recommended
-                rate is <b>{avg_ai_n:.1f} lb/ac</b>. This represents an average change of
-                <b>{avg_n_change:.1f} lb/ac</b> across the field.
+                Original average nitrogen rate: <b>{avg_original_n:.1f} lb/ac</b> →
+                AI-recommended rate: <b>{avg_ai_n:.1f} lb/ac</b>
+                (average change: <b>{avg_n_change:+.1f} lb/ac</b>).
+                <br><br>
+                Estimated total fertilizer cost at ${n_cost_per_lb:.2f}/lb:
+                Original <b>${total_orig_cost:,.0f}</b> → AI <b>${total_ai_cost:,.0f}</b>
+                — a potential saving of <b>${total_savings:,.0f}</b>.
             </div>
         </div>
         """,
-        unsafe_allow_html=True
+        unsafe_allow_html=True,
     )
 
     # ---------------------------------
@@ -503,129 +515,190 @@ if n_file is not None and y_file is not None:
     # ---------------------------------
     with st.expander("View Nitrogen Rate by Yield Class", expanded=False):
         st.markdown("Compare the original nitrogen rate with the AI-recommended rate for each yield class.")
-
         fig_n = go.Figure()
-
-        fig_n.add_trace(
-            go.Bar(
-                x=summary_display["Yield Class"],
-                y=summary_display["N Rate (lb/ac)"],
-                name="Original N Rate",
-                text=summary_display["N Rate (lb/ac)"],
-                textposition="outside"
-            )
-        )
-
-        fig_n.add_trace(
-            go.Bar(
-                x=ai_display["Yield Class"],
-                y=ai_display["AI N Rate (lb/ac)"],
-                name="AI N Rate",
-                text=ai_display["AI N Rate (lb/ac)"],
-                textposition="outside"
-            )
-        )
-
+        fig_n.add_trace(go.Bar(
+            x=summary_display["Yield Class"],
+            y=summary_display["N Rate (lb/ac)"],
+            name="Original N Rate",
+            text=summary_display["N Rate (lb/ac)"],
+            textposition="outside",
+        ))
+        fig_n.add_trace(go.Bar(
+            x=ai_display["Yield Class"],
+            y=ai_display["AI N Rate (lb/ac)"],
+            name="AI N Rate",
+            text=ai_display["AI N Rate (lb/ac)"],
+            textposition="outside",
+        ))
         fig_n.update_layout(
             barmode="group",
             height=430,
             xaxis_title="Yield Class",
             yaxis_title="Nitrogen Rate (lb/ac)",
-            margin=dict(l=20, r=20, t=20, b=20)
+            margin=dict(l=20, r=20, t=20, b=20),
         )
+        st.plotly_chart(fig_n, use_container_width=True, config={"displayModeBar": False})
 
-        st.plotly_chart(
-            fig_n,
-            width="stretch",
-            config={"displayModeBar": False}
+    # NUE chart
+    with st.expander("View Nitrogen Use Efficiency (NUE) by Yield Class", expanded=False):
+        st.markdown(
+            "NUE = Yield (bu/ac) ÷ N Rate (lb/ac). "
+            "Higher values mean nitrogen was used more efficiently by the crop."
         )
+        fig_nue = go.Figure()
+        fig_nue.add_trace(go.Bar(
+            x=summary_display["Yield Class"],
+            y=summary_display["N Efficiency (NUE)"].round(2),
+            name="NUE",
+            marker_color="#38bdf8",
+            text=summary_display["N Efficiency (NUE)"].round(2),
+            textposition="outside",
+        ))
+        fig_nue.update_layout(
+            height=400,
+            xaxis_title="Yield Class",
+            yaxis_title="NUE (bu/lb N)",
+            margin=dict(l=20, r=20, t=20, b=20),
+        )
+        st.plotly_chart(fig_nue, use_container_width=True, config={"displayModeBar": False})
+
+    # Cost chart
+    with st.expander("View Estimated Fertilizer Cost by Yield Class", expanded=False):
+        st.markdown(
+            f"Estimated fertilizer cost at **${n_cost_per_lb:.2f}/lb** for each yield zone, "
+            "comparing original and AI-recommended rates."
+        )
+        fig_cost = go.Figure()
+        fig_cost.add_trace(go.Bar(
+            x=ai_display["Yield Class"],
+            y=ai_display["Original Cost ($)"],
+            name="Original Cost ($)",
+            text=ai_display["Original Cost ($)"].apply(lambda v: f"${v:,.0f}"),
+            textposition="outside",
+        ))
+        fig_cost.add_trace(go.Bar(
+            x=ai_display["Yield Class"],
+            y=ai_display["AI Cost ($)"],
+            name="AI Cost ($)",
+            text=ai_display["AI Cost ($)"].apply(lambda v: f"${v:,.0f}"),
+            textposition="outside",
+        ))
+        fig_cost.update_layout(
+            barmode="group",
+            height=430,
+            xaxis_title="Yield Class",
+            yaxis_title="Estimated Cost ($)",
+            margin=dict(l=20, r=20, t=20, b=20),
+        )
+        st.plotly_chart(fig_cost, use_container_width=True, config={"displayModeBar": False})
 
     # ---------------------------------
-    # Side-by-side tables
+    # Side-by-side comparison tables
     # ---------------------------------
     st.subheader("Comparison: Agronomist vs AI Recommendation")
-
     table_col1, table_col2 = st.columns(2)
-
     with table_col1:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown("### Original Agronomist")
-        st.dataframe(summary_display, width="stretch", hide_index=True)
+        st.dataframe(summary_display, use_container_width=True, hide_index=True)
         st.markdown('</div>', unsafe_allow_html=True)
-
     with table_col2:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown("### AI Recommendation")
-        st.dataframe(ai_display, width="stretch", hide_index=True)
+        cols_to_show = [
+            "Yield Class", "Area (ac)", "Yield (bu/ac)", "N Rate (lb/ac)",
+            "N Efficiency (NUE)", "AI N Rate (lb/ac)", "N Change (lb/ac)",
+            "Original Cost ($)", "AI Cost ($)", "Cost Savings ($)",
+        ]
+        st.dataframe(
+            ai_display[[c for c in cols_to_show if c in ai_display.columns]],
+            use_container_width=True,
+            hide_index=True,
+        )
         st.markdown('</div>', unsafe_allow_html=True)
 
     # ---------------------------------
-    # Two-map field viewer
+    # Download button
+    # ---------------------------------
+    st.markdown('<div class="section-card">', unsafe_allow_html=True)
+    st.subheader("Export AI Recommendations")
+    export_cols = [
+        "Yield Class", "Area (ac)", "Yield (bu/ac)", "N Rate (lb/ac)",
+        "N Efficiency (NUE)", "AI N Rate (lb/ac)", "N Change (lb/ac)",
+        "Original Cost ($)", "AI Cost ($)", "Cost Savings ($)",
+    ]
+    export_df = ai_display[[c for c in export_cols if c in ai_display.columns]]
+    csv_bytes = export_df.to_csv(index=False).encode("utf-8")
+    st.download_button(
+        label="⬇️  Download AI Recommendations as CSV",
+        data=csv_bytes,
+        file_name="ai_nitrogen_recommendations.csv",
+        mime="text/csv",
+    )
+    st.markdown(
+        '<div class="small-note">Download the AI-recommended nitrogen rates by yield class '
+        'for use in your agronomic planning.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ---------------------------------
+    # Field map viewer
     # ---------------------------------
     if "geometry" in merged.columns and GEOPANDAS_AVAILABLE:
         st.subheader("Field Map Viewer")
-
         try:
             gmap = gpd.GeoDataFrame(merged.copy(), geometry="geometry")
-
             if gmap.crs is None:
                 gmap = gmap.set_crs(epsg=4326, allow_override=True)
-
             gmap = gmap.to_crs(epsg=4326)
-            gmap["lon"] = gmap.geometry.x
-            gmap["lat"] = gmap.geometry.y
+
+            # Use centroid so polygon geometries work correctly
+            gmap["lon"] = gmap.geometry.centroid.x
+            gmap["lat"] = gmap.geometry.centroid.y
 
             ai_rate_lookup = dict(zip(ai_table["Yield Class"], ai_table["AI N Rate (lb/ac)"]))
             gmap["AI_N_Rate"] = gmap["YieldClass"].map(ai_rate_lookup)
 
-            gmap["Yield"] = pd.to_numeric(gmap["Yield"], errors="coerce")
-            gmap["NitrogenRate"] = pd.to_numeric(gmap["NitrogenRate"], errors="coerce")
-            gmap["AI_N_Rate"] = pd.to_numeric(gmap["AI_N_Rate"], errors="coerce")
+            gmap["Yield"]       = pd.to_numeric(gmap["Yield"],       errors="coerce")
+            gmap["NitrogenRate"]= pd.to_numeric(gmap["NitrogenRate"],errors="coerce")
+            gmap["AI_N_Rate"]   = pd.to_numeric(gmap["AI_N_Rate"],   errors="coerce")
 
-            gmap["DisplayYield"] = gmap["Yield"].round(1)
-            gmap["DisplayOriginalN"] = gmap["NitrogenRate"].round(1)
-            gmap["DisplayAIN"] = gmap["AI_N_Rate"].round(1)
-            gmap["DisplayClass"] = gmap["YieldClass"].astype(str)
+            gmap["DisplayYield"]    = gmap["Yield"].round(1)
+            gmap["DisplayOriginalN"]= gmap["NitrogenRate"].round(1)
+            gmap["DisplayAIN"]      = gmap["AI_N_Rate"].round(1)
+            gmap["DisplayClass"]    = gmap["YieldClass"].astype(str)
 
             st.markdown('<div class="section-card">', unsafe_allow_html=True)
             st.markdown("### Field Map")
-
             map_choice = st.selectbox(
                 "Map Selection",
-                ["Original Nitrogen Applied", "AI Recommended Nitrogen Rate"]
+                ["Original Nitrogen Applied", "AI Recommended Nitrogen Rate"],
             )
 
             if map_choice == "Original Nitrogen Applied":
                 gmap["LegendRange"], range_order = make_rate_range_labels(gmap["NitrogenRate"], bins=6, decimals=1)
-                gmap = gmap.dropna(subset=["LegendRange"])
-                range_order = [r for r in range_order if str(r).lower() != "nan"]
-
-                map_title = "Original Nitrogen Applied Map"
-                map_note = "This map shows the nitrogen rate that was originally applied across the field."
+                map_title        = "Original Nitrogen Applied Map"
+                map_note         = "This map shows the nitrogen rate that was originally applied across the field."
                 hover_rate_label = "N Applied"
-                custom_cols = ["DisplayOriginalN", "DisplayYield", "DisplayClass"]
-
+                custom_cols      = ["DisplayOriginalN", "DisplayYield", "DisplayClass"]
             else:
                 gmap["LegendRange"], range_order = make_rate_range_labels(gmap["AI_N_Rate"], bins=6, decimals=1)
-                gmap = gmap.dropna(subset=["LegendRange"])
-                range_order = [r for r in range_order if str(r).lower() != ""]
-
-                map_title = "AI Recommended Nitrogen Rate Map"
-                map_note = "This map shows the AI-recommended nitrogen rate by field area."
+                map_title        = "AI Recommended Nitrogen Rate Map"
+                map_note         = "This map shows the AI-recommended nitrogen rate by field area."
                 hover_rate_label = "AI Rate"
-                custom_cols = ["DisplayAIN", "DisplayYield", "DisplayClass"]
+                custom_cols      = ["DisplayAIN", "DisplayYield", "DisplayClass"]
 
-            # Extra safety in case too few bins remain
+            gmap = gmap.dropna(subset=["LegendRange"])
+            range_order = [r for r in range_order if r and str(r).lower() not in ("nan", "")]
+
             if len(range_order) == 0:
                 st.warning("Map legend ranges could not be created from the available data.")
             else:
                 st.markdown(f"### {map_title}")
                 st.markdown(map_note)
-
-                palette = ["#ff0000", "#ff7a00", "#ffd400", "#b7e000", "#4fd000", "#00a83a"]
-                color_map = {}
-                for i, label in enumerate(range_order):
-                    color_map[label] = palette[min(i, len(palette) - 1)]
+                palette   = ["#ff0000", "#ff7a00", "#ffd400", "#b7e000", "#4fd000", "#00a83a"]
+                color_map = {label: palette[min(i, len(palette) - 1)] for i, label in enumerate(range_order)}
 
                 fig_map = px.scatter_map(
                     gmap,
@@ -636,38 +709,24 @@ if n_file is not None and y_file is not None:
                     color_discrete_map=color_map,
                     zoom=12,
                     height=650,
-                    custom_data=custom_cols
+                    custom_data=custom_cols,
                 )
-
                 fig_map.update_traces(
                     marker=dict(size=6, opacity=0.88),
                     hovertemplate=(
-                        f"<b>{hover_rate_label}:</b> " + "%{customdata[0]} lb/ac<br>"
+                        f"<b>{hover_rate_label}:</b> %{{customdata[0]}} lb/ac<br>"
                         "<b>Yield:</b> %{customdata[1]} bu/ac<br>"
                         "<b>Class:</b> %{customdata[2]}"
                         "<extra></extra>"
-                    )
+                    ),
                 )
-
                 fig_map.update_layout(
                     margin=dict(l=0, r=0, t=0, b=0),
                     legend_title_text="Nitrogen Rate",
-                    legend=dict(
-                        orientation="v",
-                        yanchor="top",
-                        y=0.98,
-                        xanchor="left",
-                        x=1.01
-                    )
+                    legend=dict(orientation="v", yanchor="top", y=0.98, xanchor="left", x=1.01),
                 )
-
-                st.plotly_chart(
-                    fig_map,
-                    width="stretch",
-                    config={"displayModeBar": False}
-                )
+                st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
             st.markdown('</div>', unsafe_allow_html=True)
-
         except Exception as e:
             st.warning(f"Field map could not be generated: {e}")
