@@ -7,13 +7,6 @@ import streamlit as st
 import plotly.express as px
 import plotly.graph_objects as go
 
-# Try to import Anthropic for real-time AI summaries and chat
-try:
-    import anthropic
-    ANTHROPIC_AVAILABLE = True
-except ImportError:
-    ANTHROPIC_AVAILABLE = False
-
 # Try to import geopandas for shapefile support
 try:
     import geopandas as gpd
@@ -90,44 +83,6 @@ div[data-baseweb="select"] > div { border-radius: 12px !important; }
 """,
     unsafe_allow_html=True
 )
-
-# ---------------------------------
-# Sidebar — API Key setup
-# ---------------------------------
-with st.sidebar:
-    st.markdown("### 🤖 AI Settings")
-
-    # Resolve API key: secrets → env → user input
-    _resolved_key = ""
-    try:
-        _resolved_key = st.secrets.get("ANTHROPIC_API_KEY", "")
-    except Exception:
-        pass
-    if not _resolved_key:
-        _resolved_key = os.environ.get("ANTHROPIC_API_KEY", "")
-
-    if _resolved_key:
-        st.success("API key loaded ✓", icon="🔑")
-        _sidebar_key = _resolved_key
-    else:
-        _sidebar_key = st.text_input(
-            "Anthropic API Key",
-            type="password",
-            placeholder="sk-ant-...",
-            help="Enter your Anthropic API key to enable real-time AI summaries and the farmer chat.",
-        )
-        if not _sidebar_key:
-            st.caption("Without a key the summary falls back to the static version and chat is disabled.")
-
-    ANTHROPIC_API_KEY = _sidebar_key  # used throughout
-
-
-def get_anthropic_client():
-    """Return an Anthropic client if a key is available, else None."""
-    if not ANTHROPIC_AVAILABLE or not ANTHROPIC_API_KEY:
-        return None
-    return anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-
 
 # ---------------------------------
 # Header
@@ -269,127 +224,6 @@ def check_columns(df, required, label):
 
 
 # ---------------------------------
-# AI helpers
-# ---------------------------------
-def build_field_context(ai_table, avg_original_n, avg_ai_n, avg_n_change, avg_nue,
-                        total_savings, total_orig_cost, total_ai_cost, total_area, n_cost_per_lb):
-    """Build a structured text description of field data to pass to the AI."""
-    rows = []
-    for _, row in ai_table.iterrows():
-        rows.append(
-            f"  - {row['Yield Class']}: Area={row['Area (ac)']:.1f} ac, "
-            f"Yield={row['Yield (bu/ac)']:.1f} bu/ac, "
-            f"NUE={row['N Efficiency (NUE)']:.2f} bu/lb N, "
-            f"Original N={row['N Rate (lb/ac)']:.1f} lb/ac, "
-            f"AI Recommended N={row['AI N Rate (lb/ac)']:.1f} lb/ac, "
-            f"Change={row['N Change (lb/ac)']:+.1f} lb/ac, "
-            f"Cost Savings=${row['Cost Savings ($)']:.0f}"
-        )
-    zone_summary = "\n".join(rows)
-
-    return f"""FIELD DATA SUMMARY:
-- Total Field Area: {total_area:.1f} acres
-- Crop: CWRS Wheat (AAC Wheatland VB)
-- Fertilizer Cost: ${n_cost_per_lb:.2f}/lb N
-- Average Original N Rate: {avg_original_n:.1f} lb/ac
-- Average AI-Recommended N Rate: {avg_ai_n:.1f} lb/ac
-- Average N Rate Change: {avg_n_change:+.1f} lb/ac
-- Average Field NUE: {avg_nue:.2f} bu/lb N
-- Total Original Fertilizer Cost: ${total_orig_cost:,.0f}
-- Total AI Fertilizer Cost: ${total_ai_cost:,.0f}
-- Estimated Cost Savings: ${total_savings:,.0f}
-
-YIELD ZONE BREAKDOWN:
-{zone_summary}
-
-DECISION MODEL USED:
-NUE < 0.40 → reduce N by 10% | NUE 0.40–0.60 → reduce 5% | NUE 0.60–0.75 → no change | NUE ≥ 0.75 → increase 5%"""
-
-
-def render_ai_summary_streaming(field_context: str, client) -> str:
-    """
-    Call Claude to generate a real-time streaming AI summary and render it live
-    inside the styled summary box. Returns the final text for downstream use.
-    """
-    system_prompt = (
-        "You are an expert agronomist AI writing a field summary for a farmer. "
-        "Use plain, practical language — no jargon. Be specific: use the exact numbers provided. "
-        "Write 4 short paragraphs (no bullet points, no markdown headers): "
-        "(1) What the NUE data tells us about nitrogen performance across the field. "
-        "(2) What the AI recommends changing and why. "
-        "(3) The economic impact of those changes. "
-        "(4) One clear, actionable next step the farmer should take."
-    )
-    user_prompt = (
-        f"Write an AI Recommendation Summary for this farmer's field:\n\n{field_context}"
-    )
-
-    placeholder = st.empty()
-    full_text = ""
-
-    try:
-        with client.messages.stream(
-            model="claude-sonnet-4-6",
-            max_tokens=550,
-            system=system_prompt,
-            messages=[{"role": "user", "content": user_prompt}],
-        ) as stream:
-            for chunk in stream.text_stream:
-                full_text += chunk
-                # Re-render the styled box on every chunk so it feels live
-                placeholder.markdown(
-                    f"""<div class="summary-box">
-                        <div class="summary-title">AI Recommendation Summary</div>
-                        <div style="line-height:1.7;">{full_text}▍</div>
-                    </div>""",
-                    unsafe_allow_html=True,
-                )
-        # Final render without the cursor character
-        placeholder.markdown(
-            f"""<div class="summary-box">
-                <div class="summary-title">AI Recommendation Summary</div>
-                <div style="line-height:1.7;">{full_text}</div>
-                <div class="small-note" style="margin-top:0.8rem;">
-                    Generated in real time by Claude · Based on your uploaded field data · Not a substitute for professional agronomic advice
-                </div>
-            </div>""",
-            unsafe_allow_html=True,
-        )
-    except Exception as e:
-        placeholder.error(f"AI summary failed: {e}")
-        full_text = ""
-
-    return full_text
-
-
-def render_static_summary(ai_table, avg_original_n, avg_ai_n, avg_n_change,
-                           avg_nue, total_orig_cost, total_ai_cost, total_savings, n_cost_per_lb):
-    """Original hard-coded summary box — used as fallback when no API key is present."""
-    lowest_eff_class = ai_table.loc[ai_table["N Efficiency (NUE)"].idxmin(), "Yield Class"]
-    highest_eff_class = ai_table.loc[ai_table["N Efficiency (NUE)"].idxmax(), "Yield Class"]
-
-    st.markdown(
-        f"""
-<div class="summary-box">
-    <div class="summary-title">AI Recommendation Summary</div>
-    <div>
-        The field was divided into yield zones to compare how nitrogen performed across different areas. Lower-yield areas showed weaker nitrogen use efficiency, while higher-yield areas showed a stronger response to the nitrogen applied.
-        <br><br>
-        Based on these patterns, the model recommends reducing nitrogen in lower-performing zones and maintaining or slightly increasing rates in stronger-performing zones.
-        <br><br>
-        The weakest nitrogen performance was in the <b>{lowest_eff_class}</b> zone (NUE: {ai_table["N Efficiency (NUE)"].min():.2f} bu/lb N), and the strongest was in the <b>{highest_eff_class}</b> zone (NUE: {ai_table["N Efficiency (NUE)"].max():.2f} bu/lb N).
-        <br><br>
-        Original average nitrogen rate: <b>{avg_original_n:.1f} lb/ac</b> → AI-recommended rate: <b>{avg_ai_n:.1f} lb/ac</b> (average change: <b>{avg_n_change:+.1f} lb/ac</b>).
-        <br><br>
-        Estimated total fertilizer cost at ${n_cost_per_lb:.2f}/lb: Original <b>${total_orig_cost:,.0f}</b> → AI <b>${total_ai_cost:,.0f}</b> — a potential saving of <b>${total_savings:,.0f}</b>.
-    </div>
-</div>
-""",
-        unsafe_allow_html=True,
-    )
-
-
-# ---------------------------------
 # Upload section
 # ---------------------------------
 st.divider()
@@ -444,13 +278,13 @@ if n_file is not None and y_file is not None:
         st.subheader("Nitrogen Prescription Preview")
         st.dataframe(
             pd.DataFrame(n_df).drop(columns=["geometry"], errors="ignore").head(),
-            width="stretch",
+            use_container_width=True,
         )
     with preview_col2:
         st.subheader("Yield Data Preview")
         st.dataframe(
             pd.DataFrame(y_df).drop(columns=["geometry"], errors="ignore").head(),
-            width="stretch",
+            use_container_width=True,
         )
 
     # ---------------------------------
@@ -649,46 +483,30 @@ if n_file is not None and y_file is not None:
         )
 
     # ---------------------------------
-    # AI Recommendation Summary
-    # (real-time streaming if API key present, static fallback otherwise)
+    # Summary box
     # ---------------------------------
-    st.divider()
+    lowest_eff_class = ai_table.loc[ai_table["N Efficiency (NUE)"].idxmin(), "Yield Class"]
+    highest_eff_class = ai_table.loc[ai_table["N Efficiency (NUE)"].idxmax(), "Yield Class"]
 
-    _client = get_anthropic_client()
-
-    if _client:
-        # Build the field context string once — reused for chat too
-        field_context = build_field_context(
-            ai_table, avg_original_n, avg_ai_n, avg_n_change, avg_nue,
-            total_savings, total_orig_cost, total_ai_cost, total_area, n_cost_per_lb,
-        )
-        # Cache the summary text in session state so it doesn't re-run on every widget interaction
-        cache_key = f"ai_summary_{hash(field_context)}"
-        if cache_key not in st.session_state:
-            st.session_state[cache_key] = render_ai_summary_streaming(field_context, _client)
-        else:
-            # Re-render cached version without streaming
-            st.markdown(
-                f"""<div class="summary-box">
-                    <div class="summary-title">AI Recommendation Summary</div>
-                    <div style="line-height:1.7;">{st.session_state[cache_key]}</div>
-                    <div class="small-note" style="margin-top:0.8rem;">
-                        Generated in real time by Claude · Based on your uploaded field data · Not a substitute for professional agronomic advice
-                    </div>
-                </div>""",
-                unsafe_allow_html=True,
-            )
-    else:
-        # No API key — use original static summary
-        field_context = build_field_context(
-            ai_table, avg_original_n, avg_ai_n, avg_n_change, avg_nue,
-            total_savings, total_orig_cost, total_ai_cost, total_area, n_cost_per_lb,
-        )
-        render_static_summary(
-            ai_table, avg_original_n, avg_ai_n, avg_n_change,
-            avg_nue, total_orig_cost, total_ai_cost, total_savings, n_cost_per_lb,
-        )
-        st.info("💡 Add your Anthropic API key in the sidebar to enable real-time AI-written summaries.", icon="🤖")
+    st.markdown(
+        f"""
+<div class="summary-box">
+    <div class="summary-title">AI Recommendation Summary</div>
+    <div>
+        The field was divided into yield zones to compare how nitrogen performed across different areas. Lower-yield areas showed weaker nitrogen use efficiency, while higher-yield areas showed a stronger response to the nitrogen applied.
+        <br><br>
+        Based on these patterns, the model recommends reducing nitrogen in lower-performing zones and maintaining or slightly increasing rates in stronger-performing zones.
+        <br><br>
+        The weakest nitrogen performance was in the <b>{lowest_eff_class}</b> zone (NUE: {ai_table["N Efficiency (NUE)"].min():.2f} bu/lb N), and the strongest was in the <b>{highest_eff_class}</b> zone (NUE: {ai_table["N Efficiency (NUE)"].max():.2f} bu/lb N).
+        <br><br>
+        Original average nitrogen rate: <b>{avg_original_n:.1f} lb/ac</b> → AI-recommended rate: <b>{avg_ai_n:.1f} lb/ac</b> (average change: <b>{avg_n_change:+.1f} lb/ac</b>).
+        <br><br>
+        Estimated total fertilizer cost at ${n_cost_per_lb:.2f}/lb: Original <b>${total_orig_cost:,.0f}</b> → AI <b>${total_ai_cost:,.0f}</b> — a potential saving of <b>${total_savings:,.0f}</b>.
+    </div>
+</div>
+""",
+        unsafe_allow_html=True,
+    )
 
     # ---------------------------------
     # Nitrogen rate chart
@@ -718,7 +536,7 @@ if n_file is not None and y_file is not None:
             yaxis_title="Nitrogen Rate (lb/ac)",
             margin=dict(l=20, r=20, t=20, b=20),
         )
-        st.plotly_chart(fig_n, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig_n, use_container_width=True, config={"displayModeBar": False})
 
     # NUE chart
     with st.expander("View Nitrogen Use Efficiency (NUE) by Yield Class", expanded=False):
@@ -745,7 +563,7 @@ if n_file is not None and y_file is not None:
             margin=dict(l=20, r=20, t=20, b=20),
             showlegend=False,
         )
-        st.plotly_chart(fig_nue, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig_nue, use_container_width=True, config={"displayModeBar": False})
 
     # Cost chart
     with st.expander("View Estimated Fertilizer Cost by Yield Class", expanded=False):
@@ -778,7 +596,7 @@ if n_file is not None and y_file is not None:
             yaxis_title="Estimated Cost ($)",
             margin=dict(l=20, r=20, t=20, b=20),
         )
-        st.plotly_chart(fig_cost, width="stretch", config={"displayModeBar": False})
+        st.plotly_chart(fig_cost, use_container_width=True, config={"displayModeBar": False})
 
     # ---------------------------------
     # Side-by-side comparison tables
@@ -788,7 +606,7 @@ if n_file is not None and y_file is not None:
     table_col1, table_col2 = st.columns(2)
     with table_col1:
         st.markdown("#### Original Agronomist")
-        st.dataframe(summary_display, width="stretch", hide_index=True)
+        st.dataframe(summary_display, use_container_width=True, hide_index=True)
     with table_col2:
         st.markdown("#### AI Recommendation")
         cols_to_show = [
@@ -805,7 +623,7 @@ if n_file is not None and y_file is not None:
         ]
         st.dataframe(
             ai_display[[c for c in cols_to_show if c in ai_display.columns]],
-            width="stretch",
+            use_container_width=True,
             hide_index=True,
         )
 
@@ -856,6 +674,7 @@ if n_file is not None and y_file is not None:
                 gmap = gmap.set_crs(epsg=4326, allow_override=True)
             gmap = gmap.to_crs(epsg=4326)
 
+            # Use centroid so polygon geometries work correctly
             gmap["lon"] = gmap.geometry.centroid.x
             gmap["lat"] = gmap.geometry.centroid.y
 
@@ -876,6 +695,7 @@ if n_file is not None and y_file is not None:
                 ["Original Nitrogen Applied", "AI Recommended Nitrogen Rate"],
             )
 
+            # Yield-class colour palette (red → green = very low → very high)
             YIELD_CLASS_ORDER = ["Very Low", "Low", "Medium", "High", "Very High"]
             YIELD_CLASS_PALETTE = {
                 "Very Low": "#dc2626",
@@ -886,6 +706,7 @@ if n_file is not None and y_file is not None:
             }
 
             if map_choice == "Original Nitrogen Applied":
+                # Original map: colour by binned N rate (red = low, green = high)
                 gmap["LegendRange"], range_order = make_rate_range_labels(
                     gmap["NitrogenRate"], bins=6, decimals=1
                 )
@@ -893,6 +714,7 @@ if n_file is not None and y_file is not None:
                 range_order = [r for r in range_order if r and str(r).lower() not in ("nan", "")]
 
                 map_note = "Each dot shows the nitrogen rate originally applied at that location. Red = lower rates, green = higher rates."
+                hover_rate_label = "N Applied"
                 custom_cols = ["DisplayOriginalN", "DisplayYield", "DisplayClass"]
 
                 if len(range_order) == 0:
@@ -904,16 +726,23 @@ if n_file is not None and y_file is not None:
                     st.markdown(map_note)
 
                     fig_map = px.scatter_map(
-                        gmap, lat="lat", lon="lon", color="LegendRange",
+                        gmap,
+                        lat="lat",
+                        lon="lon",
+                        color="LegendRange",
                         category_orders={"LegendRange": range_order},
-                        color_discrete_map=color_map, zoom=12, height=650, custom_data=custom_cols,
+                        color_discrete_map=color_map,
+                        zoom=12,
+                        height=650,
+                        custom_data=custom_cols,
                     )
                     fig_map.update_traces(
                         marker=dict(size=6, opacity=0.88),
                         hovertemplate=(
-                            "<b>N Applied:</b> %{customdata[0]} lb/ac<br>"
+                            f"<b>{hover_rate_label}:</b> %{{customdata[0]}} lb/ac<br>"
                             "<b>Yield:</b> %{customdata[1]} bu/ac<br>"
-                            "<b>Class:</b> %{customdata[2]}<extra></extra>"
+                            "<b>Class:</b> %{customdata[2]}"
+                            "<extra></extra>"
                         ),
                     )
                     fig_map.update_layout(
@@ -921,9 +750,10 @@ if n_file is not None and y_file is not None:
                         legend_title_text="N Rate",
                         legend=dict(orientation="v", yanchor="top", y=0.98, xanchor="left", x=1.01),
                     )
-                    st.plotly_chart(fig_map, width="stretch", config={"displayModeBar": False})
+                    st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
             else:
+                # AI map: colour by yield class (NUE performance)
                 gmap["YieldClassStr"] = gmap["YieldClass"].astype(str)
                 gmap = gmap.dropna(subset=["YieldClassStr", "AI_N_Rate"])
 
@@ -937,16 +767,23 @@ if n_file is not None and y_file is not None:
                 st.markdown(map_note)
 
                 fig_map = px.scatter_map(
-                    gmap, lat="lat", lon="lon", color="YieldClassStr",
+                    gmap,
+                    lat="lat",
+                    lon="lon",
+                    color="YieldClassStr",
                     category_orders={"YieldClassStr": YIELD_CLASS_ORDER},
-                    color_discrete_map=YIELD_CLASS_PALETTE, zoom=12, height=650, custom_data=custom_cols,
+                    color_discrete_map=YIELD_CLASS_PALETTE,
+                    zoom=12,
+                    height=650,
+                    custom_data=custom_cols,
                 )
                 fig_map.update_traces(
                     marker=dict(size=6, opacity=0.88),
                     hovertemplate=(
                         "<b>AI Rate:</b> %{customdata[0]} lb/ac<br>"
                         "<b>Yield:</b> %{customdata[1]} bu/ac<br>"
-                        "<b>Class:</b> %{customdata[2]}<extra></extra>"
+                        "<b>Class:</b> %{customdata[2]}"
+                        "<extra></extra>"
                     ),
                 )
                 fig_map.update_layout(
@@ -954,90 +791,7 @@ if n_file is not None and y_file is not None:
                     legend_title_text="Yield Class (NUE)",
                     legend=dict(orientation="v", yanchor="top", y=0.98, xanchor="left", x=1.01),
                 )
-                st.plotly_chart(fig_map, width="stretch", config={"displayModeBar": False})
+                st.plotly_chart(fig_map, use_container_width=True, config={"displayModeBar": False})
 
         except Exception as e:
             st.warning(f"Field map could not be generated: {e}")
-
-    # =================================================================
-    # FARMER CHAT — Ask the AI About Your Field
-    # =================================================================
-    if _client:
-        st.divider()
-        st.subheader("💬 Ask the AI About Your Field")
-        st.markdown(
-            '<div class="small-note" style="margin-bottom:1rem;">Ask any question about your nitrogen data, '
-            "zone performance, cost implications, or management decisions. "
-            "The AI has full context of your field's data.</div>",
-            unsafe_allow_html=True,
-        )
-
-        # Initialise chat history in session state
-        if "chat_history" not in st.session_state:
-            st.session_state.chat_history = []
-
-        # Suggested starter questions
-        if not st.session_state.chat_history:
-            st.markdown("**Suggested questions:**")
-            starters = [
-                "Why was NUE so low in my Very Low yield zone?",
-                "Is it worth increasing nitrogen in my High yield zones?",
-                "What should I investigate before next season?",
-                "How much nitrogen could I save without hurting yield?",
-            ]
-            cols = st.columns(2)
-            for i, q in enumerate(starters):
-                if cols[i % 2].button(q, key=f"starter_{i}", width="stretch"):
-                    st.session_state.chat_history.append({"role": "user", "content": q})
-                    st.rerun()
-
-        # Render existing conversation
-        for msg in st.session_state.chat_history:
-            with st.chat_message(msg["role"], avatar="🌾" if msg["role"] == "user" else "🤖"):
-                st.write(msg["content"])
-
-        # Chat input box
-        if user_input := st.chat_input("Ask about your field data…"):
-            st.session_state.chat_history.append({"role": "user", "content": user_input})
-            with st.chat_message("user", avatar="🌾"):
-                st.write(user_input)
-
-            # Build message list for the API (last 10 turns to stay within context)
-            history_window = st.session_state.chat_history[-10:]
-            api_messages = [
-                {"role": m["role"], "content": m["content"]}
-                for m in history_window
-            ]
-
-            system = f"""You are an expert agronomist AI helping a farmer understand their nitrogen management data.
-Always ground your answers in the specific numbers from their field. Be practical, direct, and farmer-friendly.
-Do not use excessive jargon. If you recommend an action, say what it is clearly.
-
-CURRENT FIELD DATA:
-{field_context}"""
-
-            with st.chat_message("assistant", avatar="🤖"):
-                response_placeholder = st.empty()
-                full_reply = ""
-                try:
-                    with _client.messages.stream(
-                        model="claude-sonnet-4-6",
-                        max_tokens=600,
-                        system=system,
-                        messages=api_messages,
-                    ) as stream:
-                        for chunk in stream.text_stream:
-                            full_reply += chunk
-                            response_placeholder.write(full_reply + "▍")
-                    response_placeholder.write(full_reply)
-                except Exception as e:
-                    full_reply = f"Sorry, there was an error generating a response: {e}"
-                    response_placeholder.error(full_reply)
-
-            st.session_state.chat_history.append({"role": "assistant", "content": full_reply})
-
-        # Clear chat button
-        if st.session_state.chat_history:
-            if st.button("🗑️ Clear conversation", key="clear_chat"):
-                st.session_state.chat_history = []
-                st.rerun()
